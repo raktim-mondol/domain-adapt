@@ -545,6 +545,269 @@ total_loss = classification_loss + lambda_mmd * total_mmd
 
 ---
 
+#### 2.1.6 **Hybrid Approach: Combining Adversarial and MMD with Orthogonal Constraint**
+
+**Motivation**: Combining adversarial domain adaptation (DANN) with MMD can provide complementary benefits - adversarial learning for fine-grained alignment and MMD for explicit distribution matching. However, this introduces a critical risk: **over-alignment (domain collapse)**.
+
+**Risk: Over-Alignment (Domain Collapse)**
+
+When both adversarial loss and MMD loss push features from different domains to align, they may align so aggressively that:
+- **Class separability degrades**: Decision boundaries between classes become blurred
+- **Feature collapse**: Different classes map to similar feature representations
+- **Reduced discriminability**: The classifier can no longer distinguish between classes effectively
+
+**Visual Illustration**:
+```
+Before Domain Adaptation:
+Source: ●●● (Class 0)  ■■■ (Class 1)  ▲▲▲ (Class 2)
+Target: ○○○ (Class 0)  □□□ (Class 1)  △△△ (Class 2)
+↓
+Without Orthogonal Constraint (Over-aligned):
+Both:   ●○●○ (collapsed)  ■□■□ (collapsed)  ▲△▲△ (collapsed)
+        [Domain-invariant but classes overlap!]
+↓
+With Orthogonal Constraint (Proper alignment):
+Both:   ●○●○ (aligned, Class 0)  ■□■□ (aligned, Class 1)  ▲△▲△ (aligned, Class 2)
+        [Domain-invariant AND classes remain separated]
+```
+
+**Solution: Orthogonal Constraint**
+
+The key insight is to ensure that domain alignment (done by the domain discriminator) operates in a feature subspace **orthogonal** to the class discrimination subspace (used by the class classifier). This prevents domain alignment from rotating or distorting the class decision boundaries.
+
+**Mathematical Formulation**:
+
+```python
+# Classification loss (standard cross-entropy)
+L_cls = CrossEntropy(class_classifier(features), labels)
+
+# Adversarial domain loss (GRL)
+L_adv = CrossEntropy(domain_discriminator(GRL(features)), domain_labels)
+
+# MMD loss (distribution matching)
+L_mmd = MMD(source_features, target_features)
+
+# Orthogonal constraint (key addition!)
+# Ensure classifier weights and discriminator weights are orthogonal
+W_cls = class_classifier.weight  # Shape: [num_classes, feature_dim]
+W_domain = domain_discriminator.weight  # Shape: [1, feature_dim]
+
+# Compute orthogonality: should be close to zero
+L_orthogonal = torch.norm(torch.mm(W_cls, W_domain.T))
+
+# Alternative: Cosine similarity should be close to zero
+# L_orthogonal = torch.abs(F.cosine_similarity(W_cls, W_domain.expand_as(W_cls), dim=1).mean())
+
+# Total loss with all components
+L_total = L_cls + λ_adv * L_adv + λ_mmd * L_mmd + λ_orth * L_orthogonal
+```
+
+**Implementation**:
+
+```python
+class HybridDomainAdaptiveMIL(nn.Module):
+    """
+    Combines Adversarial + MMD + Orthogonal Constraint
+    for robust domain adaptation without over-alignment
+    """
+    def __init__(self, feature_dim=768, num_classes=3):
+        super().__init__()
+
+        # Feature extractor
+        self.feature_extractor = ViTR50()
+
+        # MIL attention aggregator
+        self.attention_aggregator = AttentionAggregator()
+
+        # Class classifier
+        self.class_classifier = nn.Sequential(
+            nn.Linear(feature_dim, 512),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(512, num_classes)
+        )
+
+        # Domain discriminator
+        self.domain_discriminator = nn.Sequential(
+            nn.Linear(feature_dim, 256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(256, 1)
+        )
+
+        # Gradient reversal layer
+        self.grl = GradientReversalLayer()
+
+    def forward(self, bags, alpha=1.0):
+        # Extract features
+        patch_features = self.feature_extractor(bags)
+
+        # Aggregate with attention
+        bag_features, attention = self.attention_aggregator(patch_features)
+
+        # Class prediction
+        class_logits = self.class_classifier(bag_features)
+
+        # Domain prediction (with gradient reversal)
+        domain_features = self.grl(bag_features, alpha)
+        domain_logits = self.domain_discriminator(domain_features)
+
+        return class_logits, domain_logits, bag_features, attention
+
+    def get_orthogonal_loss(self):
+        """
+        Compute orthogonality constraint between classifier and discriminator weights
+        """
+        # Get weights from final linear layers
+        cls_weight = self.class_classifier[-1].weight  # [num_classes, 512]
+        domain_weight = self.domain_discriminator[-1].weight  # [1, 256]
+
+        # If dimensions don't match, use earlier layers
+        # Option 1: Use first layer weights
+        cls_weight = self.class_classifier[0].weight  # [512, feature_dim]
+        domain_weight = self.domain_discriminator[0].weight  # [256, feature_dim]
+
+        # Project to common dimension for comparison
+        # Compute Gram matrix to measure alignment
+        cls_norm = F.normalize(cls_weight, p=2, dim=1)  # Normalize rows
+        domain_norm = F.normalize(domain_weight, p=2, dim=1)
+
+        # Orthogonality: minimize inner product
+        # High value = vectors are aligned (BAD)
+        # Low value = vectors are orthogonal (GOOD)
+        orthogonality = torch.mm(cls_norm, domain_norm.T)
+        loss = torch.norm(orthogonality)  # Minimize this
+
+        return loss
+
+
+def train_hybrid_domain_adaptation(model, source_loader, target_loader,
+                                   lambda_adv=1.0, lambda_mmd=0.5, lambda_orth=0.1):
+    """
+    Training loop with hybrid approach and orthogonal constraint
+    """
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+
+    for epoch in range(num_epochs):
+        for (source_bags, source_labels), (target_bags, _) in zip(source_loader, target_loader):
+
+            # Forward pass on source
+            source_class_logits, source_domain_logits, source_features, _ = model(source_bags, alpha)
+
+            # Forward pass on target
+            target_class_logits, target_domain_logits, target_features, _ = model(target_bags, alpha)
+
+            # 1. Classification loss (source only)
+            loss_cls = F.cross_entropy(source_class_logits, source_labels)
+
+            # 2. Adversarial domain loss
+            source_domain_labels = torch.zeros(len(source_bags), device=device)
+            target_domain_labels = torch.ones(len(target_bags), device=device)
+
+            loss_adv = F.binary_cross_entropy_with_logits(
+                source_domain_logits.squeeze(), source_domain_labels
+            ) + F.binary_cross_entropy_with_logits(
+                target_domain_logits.squeeze(), target_domain_labels
+            )
+
+            # 3. MMD loss
+            loss_mmd = mmd_loss(source_features, target_features)
+
+            # 4. Orthogonal constraint (CRITICAL!)
+            loss_orth = model.get_orthogonal_loss()
+
+            # Total loss
+            total_loss = loss_cls + lambda_adv * loss_adv + lambda_mmd * loss_mmd + lambda_orth * loss_orth
+
+            # Backpropagation
+            optimizer.zero_grad()
+            total_loss.backward()
+            optimizer.step()
+
+            # Update GRL alpha (schedule from 0 to 1)
+            alpha = 2 / (1 + np.exp(-10 * epoch / num_epochs)) - 1
+
+            # Logging
+            if batch_idx % 10 == 0:
+                print(f"Epoch {epoch}, Batch {batch_idx}")
+                print(f"  L_cls: {loss_cls:.4f}")
+                print(f"  L_adv: {loss_adv:.4f}")
+                print(f"  L_mmd: {loss_mmd:.4f}")
+                print(f"  L_orth: {loss_orth:.4f} ← Monitor this!")
+                print(f"  Total: {total_loss:.4f}")
+```
+
+**Hyperparameter Tuning**:
+
+| Parameter | Recommended Range | Effect |
+|-----------|------------------|---------|
+| `λ_adv` | 0.5 - 2.0 | Higher = stronger adversarial alignment (risk: over-alignment) |
+| `λ_mmd` | 0.1 - 1.0 | Higher = stronger distribution matching (risk: over-alignment) |
+| `λ_orth` | 0.05 - 0.5 | Higher = stronger orthogonality constraint (prevents over-alignment) |
+
+**Tuning Strategy**:
+1. Start with `λ_orth = 0.1` (moderate constraint)
+2. If target accuracy improves but source accuracy drops → increase `λ_orth`
+3. If domain gap remains large → increase `λ_adv` and `λ_mmd`, but also increase `λ_orth` proportionally
+4. Monitor the orthogonality loss: should decrease over training but not collapse to zero
+
+**Monitoring Metrics for Over-Alignment**:
+```python
+# During validation
+def check_over_alignment(model, source_data, target_data):
+    """Diagnostic checks for over-alignment"""
+
+    # 1. Source domain accuracy should NOT drop
+    source_acc = evaluate(model, source_data)
+    if source_acc < baseline_source_acc * 0.95:
+        print("⚠️ WARNING: Source accuracy dropped - possible over-alignment!")
+
+    # 2. Class separation in feature space
+    features, labels = extract_features(model, source_data)
+    within_class_var = compute_within_class_variance(features, labels)
+    between_class_var = compute_between_class_variance(features, labels)
+    separation_ratio = between_class_var / within_class_var
+
+    if separation_ratio < 2.0:
+        print("⚠️ WARNING: Low class separation - possible feature collapse!")
+
+    # 3. Feature diversity (should not collapse to single point)
+    feature_std = torch.std(features, dim=0).mean()
+    if feature_std < 0.1:
+        print("⚠️ WARNING: Low feature diversity - possible collapse!")
+
+    # 4. Orthogonality metric
+    orth_loss = model.get_orthogonal_loss()
+    if orth_loss > 0.5:
+        print("⚠️ WARNING: High orthogonality loss - classifier and discriminator not orthogonal!")
+```
+
+**When to Use This Hybrid Approach**:
+
+✅ **Use when**:
+- Domain shift is severe (large covariate shift)
+- You want complementary alignment (adversarial + statistical)
+- You have sufficient computational resources
+- Source domain performance must be maintained
+
+❌ **Avoid when**:
+- Single method (DANN or MMD alone) already works well
+- Limited computational budget (3 losses to compute)
+- Small dataset (risk of overfitting to regularization terms)
+
+**Expected Benefits**:
+- **Better alignment**: Combining adversarial + MMD often achieves 2-5% better target accuracy than single methods
+- **Maintained source performance**: Orthogonal constraint prevents catastrophic forgetting
+- **Robust to hyperparameters**: Less sensitive to exact values of λ_adv and λ_mmd
+- **Reduced domain gap**: Often achieves <5% domain gap (vs. 10-15% for single methods)
+
+**Implementation Files**:
+- `src/models/hybrid_domain_adaptive_mil.py`
+- `src/losses/orthogonal_constraint.py`
+- `src/training/hybrid_training.py`
+
+---
+
 #### 3.2.3 **Method 3: Contrastive Domain Adaptation (Priority 2)**
 
 **Contrastive Loss Design**:
@@ -1337,6 +1600,7 @@ tensorboard>=2.11.0
 | Overfitting to target domain | Medium | Medium | Regularization, hold-out target validation |
 | Increased training time | High | Low | Start with efficient methods (MMD), parallelize |
 | Label noise in pseudo-labels | High | Medium | Confidence thresholding, ensemble filtering |
+| **Over-alignment (Domain Collapse)** | **Medium-High** | **Critical** | **Orthogonal constraint, monitor source accuracy** |
 
 ### 7.2 Fallback Strategies
 
@@ -1354,6 +1618,318 @@ tensorboard>=2.11.0
    - Start with MMD (no discriminator)
    - Use smaller batch sizes with gradient accumulation
    - Pre-extract features, train only top layers
+
+---
+
+### 7.3 Critical Risk: Over-Alignment (Domain Collapse)
+
+**Problem Statement**:
+
+When combining multiple domain adaptation techniques (especially Adversarial + MMD), there is a critical risk that the model will align source and target domains **too aggressively**, causing features from different classes to collapse into similar representations. This phenomenon is called **over-alignment** or **domain collapse**.
+
+**Why This Happens**:
+
+1. **Adversarial Loss** pushes features to confuse the domain discriminator
+   - Drives source and target features closer together
+   - No inherent constraint to preserve class boundaries
+
+2. **MMD Loss** minimizes statistical distance between domains
+   - Explicitly matches feature distributions
+   - Can inadvertently match across class boundaries
+
+3. **Combined Effect** is multiplicative:
+   - Both losses work in the same direction (alignment)
+   - No opposing force to maintain class separability
+   - Decision boundaries can rotate, shrink, or disappear
+
+**Symptoms of Over-Alignment**:
+
+| Symptom | How to Detect | Healthy Range | Danger Zone |
+|---------|---------------|---------------|-------------|
+| Source accuracy drop | Compare to baseline | >95% of baseline | <90% of baseline |
+| Target accuracy plateau | Monitor validation curve | Steady improvement | Plateaus early then drops |
+| Class confusion increase | Confusion matrix off-diagonals | <10% per class | >20% per class |
+| Feature variance collapse | `torch.std(features).mean()` | >0.3 | <0.1 |
+| Class separation ratio | `between_class_var / within_class_var` | >3.0 | <2.0 |
+| Orthogonality loss | `‖W_cls^T W_domain‖` | <0.3 | >0.5 |
+
+**Detailed Mitigation Strategies**:
+
+#### Strategy 1: Orthogonal Constraint (Recommended)
+
+**Concept**: Force classifier and discriminator to operate in orthogonal subspaces.
+
+```python
+# Add to loss function
+L_orthogonal = torch.norm(torch.mm(W_cls, W_domain.T))
+L_total = L_cls + λ_adv*L_adv + λ_mmd*L_mmd + λ_orth*L_orthogonal
+```
+
+**Benefits**:
+- Directly prevents domain alignment from affecting class boundaries
+- Mathematically grounded (subspace orthogonality)
+- Small computational overhead
+- Effective across different domain gaps
+
+**Hyperparameter Guidance**:
+- Start with `λ_orth = 0.1`
+- If source accuracy drops: increase to 0.2-0.5
+- If domain gap remains large: keep at 0.1, increase `λ_adv` and `λ_mmd` instead
+
+#### Strategy 2: Conditional Domain Adaptation
+
+**Concept**: Align domains **within each class separately**, not globally.
+
+```python
+# Instead of global alignment:
+L_adv = adversarial_loss(all_features)  # BAD - ignores classes
+
+# Use class-conditional alignment:
+for class_id in range(num_classes):
+    source_class_features = source_features[source_labels == class_id]
+    target_class_features = target_features[pseudo_labels == class_id]
+    L_adv += adversarial_loss(source_class_features, target_class_features)
+```
+
+**Benefits**:
+- Aligns same-class features across domains
+- Preserves inter-class separation by design
+- Used in CDAN (Conditional Domain Adversarial Network)
+
+**Challenges**:
+- Requires pseudo-labels for target domain
+- More complex implementation
+- Higher computational cost (per-class alignment)
+
+#### Strategy 3: Progressive Adaptation with Early Stopping
+
+**Concept**: Start adaptation gradually, stop before over-alignment occurs.
+
+```python
+# Schedule adaptation strength
+def get_adaptation_weight(epoch, max_epochs):
+    # Gradual increase, then plateau
+    if epoch < max_epochs * 0.5:
+        return (epoch / (max_epochs * 0.5)) * 1.0  # Increase to 1.0
+    else:
+        return 1.0  # Hold constant
+
+lambda_adv = get_adaptation_weight(epoch, max_epochs) * base_lambda_adv
+
+# Early stopping on SOURCE validation set
+if source_val_accuracy < best_source_accuracy * 0.95:
+    print("Source accuracy dropped - stopping adaptation")
+    break
+```
+
+**Benefits**:
+- Simple to implement
+- Catches over-alignment before catastrophic
+- Works with any DA method
+
+**Limitations**:
+- May stop before reaching optimal target performance
+- Requires careful monitoring
+- Suboptimal if domain gap is large
+
+#### Strategy 4: Class-Aware Regularization
+
+**Concept**: Explicitly preserve class structure during adaptation.
+
+```python
+def class_separation_loss(features, labels):
+    """
+    Encourage large between-class distance, small within-class distance
+    """
+    num_classes = labels.max() + 1
+
+    # Compute class centroids
+    centroids = []
+    for c in range(num_classes):
+        class_features = features[labels == c]
+        centroids.append(class_features.mean(dim=0))
+    centroids = torch.stack(centroids)  # [num_classes, feature_dim]
+
+    # Within-class compactness
+    within_class_loss = 0
+    for c in range(num_classes):
+        class_features = features[labels == c]
+        distances = torch.norm(class_features - centroids[c], dim=1)
+        within_class_loss += distances.mean()
+
+    # Between-class separation
+    centroid_distances = torch.cdist(centroids, centroids)
+    # Exclude diagonal (distance to self)
+    mask = ~torch.eye(num_classes, dtype=torch.bool)
+    between_class_loss = -centroid_distances[mask].mean()  # Negative = maximize
+
+    return within_class_loss + between_class_loss
+
+# Add to total loss
+L_class_structure = class_separation_loss(source_features, source_labels)
+L_total = L_cls + λ_adv*L_adv + λ_mmd*L_mmd + λ_structure*L_class_structure
+```
+
+**Benefits**:
+- Explicitly maintains class structure
+- Works with any DA method as an additional regularizer
+- Interpretable geometric objective
+
+#### Strategy 5: Selective Adaptation (Freeze Classifier Head)
+
+**Concept**: Only adapt feature extractor, keep classifier head frozen after initial training.
+
+```python
+# Phase 1: Train classifier on source domain
+model.train()
+train_on_source(model, source_data)
+
+# Phase 2: Freeze classifier, only adapt feature extractor
+for param in model.class_classifier.parameters():
+    param.requires_grad = False  # Freeze
+
+# Only domain discriminator and feature extractor are trainable
+domain_adapt(model, source_data, target_data)
+```
+
+**Benefits**:
+- Guarantees classifier decision boundaries don't change
+- Simple to implement
+- Reduces risk of catastrophic forgetting
+
+**Limitations**:
+- May not fully adapt if classifier needs adjustment
+- Assumes source classifier is optimal
+- Less flexible than joint adaptation
+
+#### Strategy 6: Multi-Task Learning with Auxiliary Tasks
+
+**Concept**: Add auxiliary self-supervised tasks to maintain feature quality.
+
+```python
+# Auxiliary task: Rotation prediction (self-supervised)
+def rotation_prediction_loss(features, images):
+    # Rotate images by 0°, 90°, 180°, 270°
+    rotated_images = apply_rotations(images)  # [4*B, ...]
+    rotation_labels = torch.tensor([0, 1, 2, 3]).repeat(B)
+
+    # Predict rotation angle
+    rotation_logits = rotation_classifier(features)
+    loss = F.cross_entropy(rotation_logits, rotation_labels)
+    return loss
+
+# Add to total loss
+L_rotation = rotation_prediction_loss(features, images)
+L_total = L_cls + λ_adv*L_adv + λ_mmd*L_mmd + λ_rot*L_rotation
+```
+
+**Benefits**:
+- Forces model to maintain rich, diverse features
+- Self-supervised (no extra labels needed)
+- Prevents feature collapse
+- Used in Test-Time Training (TTT)
+
+**Best Practice: Combined Monitoring Dashboard**
+
+```python
+class OverAlignmentMonitor:
+    """Comprehensive monitoring for over-alignment"""
+
+    def __init__(self, baseline_source_acc):
+        self.baseline_source_acc = baseline_source_acc
+        self.alerts = []
+
+    def check_all(self, model, source_val_data, target_val_data, epoch):
+        alerts = []
+
+        # 1. Source accuracy
+        source_acc = evaluate(model, source_val_data)
+        if source_acc < self.baseline_source_acc * 0.95:
+            alerts.append(f"⚠️ Source accuracy: {source_acc:.2%} (baseline: {self.baseline_source_acc:.2%})")
+
+        # 2. Feature diversity
+        features = extract_features(model, source_val_data)
+        feature_std = torch.std(features, dim=0).mean().item()
+        if feature_std < 0.1:
+            alerts.append(f"⚠️ Low feature diversity: {feature_std:.4f}")
+
+        # 3. Class separation
+        separation_ratio = self.compute_class_separation(model, source_val_data)
+        if separation_ratio < 2.0:
+            alerts.append(f"⚠️ Poor class separation: {separation_ratio:.2f}")
+
+        # 4. Orthogonality
+        orth_loss = model.get_orthogonal_loss().item()
+        if orth_loss > 0.5:
+            alerts.append(f"⚠️ High orthogonality loss: {orth_loss:.4f}")
+
+        # 5. Confusion matrix analysis
+        conf_matrix = compute_confusion_matrix(model, source_val_data)
+        off_diagonal_rate = (conf_matrix.sum() - conf_matrix.diag().sum()) / conf_matrix.sum()
+        if off_diagonal_rate > 0.2:
+            alerts.append(f"⚠️ High confusion rate: {off_diagonal_rate:.2%}")
+
+        if alerts:
+            print(f"\n{'='*60}")
+            print(f"OVER-ALIGNMENT ALERTS - Epoch {epoch}")
+            print(f"{'='*60}")
+            for alert in alerts:
+                print(alert)
+            print(f"{'='*60}\n")
+
+            # Recommend action
+            if len(alerts) >= 3:
+                print("🛑 CRITICAL: Multiple over-alignment indicators!")
+                print("   → Increase λ_orth (orthogonal constraint)")
+                print("   → Reduce λ_adv and λ_mmd")
+                print("   → Consider early stopping")
+
+        return len(alerts) == 0  # True if healthy
+
+# Usage in training loop
+monitor = OverAlignmentMonitor(baseline_source_acc=0.85)
+
+for epoch in range(num_epochs):
+    train_one_epoch(...)
+
+    # Check for over-alignment every 5 epochs
+    if epoch % 5 == 0:
+        is_healthy = monitor.check_all(model, source_val_data, target_val_data, epoch)
+
+        if not is_healthy and epoch > 20:
+            print("Stopping early due to over-alignment risk")
+            break
+```
+
+**Recommended Approach** (Multi-Layer Defense):
+
+1. **Primary**: Use **Orthogonal Constraint** (Strategy 1)
+   - Add to all hybrid DA approaches
+   - Start with `λ_orth = 0.1`
+
+2. **Secondary**: Implement **Monitoring** (Strategy 6)
+   - Track all symptoms of over-alignment
+   - Alert when metrics enter danger zone
+
+3. **Backup**: Use **Progressive Adaptation** (Strategy 3)
+   - Gradual increase in adaptation strength
+   - Early stopping if source accuracy drops
+
+4. **Optional**: Add **Class Separation Loss** (Strategy 4)
+   - If domain gap is very large
+   - If over-alignment still occurs with above strategies
+
+**Expected Outcomes**:
+
+| Scenario | Without Mitigation | With Orthogonal Constraint |
+|----------|-------------------|---------------------------|
+| Source accuracy | 85% → 70% (drops) | 85% → 83% (maintained) |
+| Target accuracy | 40% → 65% | 40% → 72% (better!) |
+| Domain gap | 25% → 5% | 25% → 11% |
+| Class confusion | Low → High | Low → Low |
+| Training stability | Unstable, diverges | Stable, converges |
+
+**Key Takeaway**: Over-alignment is a **critical risk** when combining multiple domain adaptation methods. The **orthogonal constraint** is the most effective and efficient mitigation strategy, ensuring domain-invariant features while preserving class separability.
 
 ---
 
