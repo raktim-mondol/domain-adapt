@@ -10,6 +10,547 @@ This document outlines a comprehensive strategy to adapt the current BMA MIL (Mu
 
 ---
 
+## 0. FINALIZED METHOD - READY FOR REVIEW
+
+---
+
+## 📋 Executive Decision
+
+**Selected Method**: **Hybrid DANN + MMD + Orthogonal Constraint (Supervised)**
+
+**Why This Method**:
+- ✅ **DANN**: Proven adversarial domain adaptation (stable with GRL)
+- ✅ **MMD**: Statistical distribution matching (no adversarial instability)
+- ✅ **Orthogonal Constraint**: Critical safeguard against over-alignment
+- ✅ **Modular Design**: Easy to add contrastive loss later
+- ✅ **Supervised**: Both domains labeled → stronger training signal
+
+---
+
+## 0.1 Problem Setup - Your Specific Scenario
+
+### Data Configuration
+
+| Domain | Name | Role | Labels | Classes | Status |
+|--------|------|------|--------|---------|--------|
+| Source | **QLD1** | Training Site | ✅ Available | 3 (Cat1, Cat2, Cat3) | Fully labeled |
+| Target | **QLD2** | New Site | ✅ Available | 3 (Cat1, Cat2, Cat3) | Fully labeled |
+
+### Scenario Type: **Supervised Domain Adaptation**
+
+**Key Advantage**: You have labels for BOTH QLD1 and QLD2!
+- Can use QLD2 labels directly during training (no pseudo-labeling needed)
+- Stronger supervision signal → better performance
+- Faster convergence (typically 20-30% fewer epochs)
+- Expected 5-10% accuracy boost compared to unsupervised methods
+
+**Training Strategy**:
+```
+Source Batch (QLD1) + Target Batch (QLD2)
+        ↓                        ↓
+   [Labels: Cat1-3]        [Labels: Cat1-3]
+        ↓                        ↓
+    L_cls_source  +  L_cls_target  (both contribute to classification loss!)
+        ↓
+    + L_adv (domain confusion via DANN)
+    + L_mmd (statistical alignment)
+    + L_orth (prevent over-alignment)
+```
+
+---
+
+## 0.2 Finalized Architecture
+
+### Overall System Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    INPUT: QLD1 or QLD2 Images                    │
+│                    (Patches from pile images)                    │
+└─────────────────┬───────────────────────────────────────────────┘
+                  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│              EXISTING: Feature Extractor (ViT-R50)               │
+│              Pre-trained on ImageNet, fine-tunable               │
+└─────────────────┬───────────────────────────────────────────────┘
+                  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│           EXISTING: MIL Attention Aggregator (512-dim)           │
+│           Aggregates patch features to bag features              │
+└─────────────────┬───────────────────────────────────────────────┘
+                  ↓
+          Bag Features (512-dim)
+                  ↓
+    ┌─────────────┴─────────────┐
+    ↓                           ↓
+┌─────────────────┐   ┌────────────────────────┐
+│ Class Classifier│   │ Domain Discriminator   │
+│   (3 classes)   │   │  (Source vs Target)    │
+│                 │   │  + Gradient Reversal   │
+└────────┬────────┘   └───────────┬────────────┘
+         ↓                        ↓
+    Class Logits            Domain Logits
+         ↓                        ↓
+    L_cls (CE)              L_adv (BCE + GRL)
+```
+
+### Loss Functions
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                       LOSS COMPUTATION                          │
+└────────────────────────────────────────────────────────────────┘
+
+1. Classification Loss (Supervised - both domains!)
+   L_cls = CE(source_logits, source_labels) + CE(target_logits, target_labels)
+
+2. Adversarial Loss (DANN with Gradient Reversal)
+   L_adv = BCE(source_domain_logits, 0) + BCE(target_domain_logits, 1)
+   Note: Gradient reversed during backprop
+
+3. MMD Loss (Statistical Distribution Matching)
+   L_mmd = MMD(source_features, target_features)
+   Multi-kernel with Gaussian RBF
+
+4. Orthogonal Constraint (Critical!)
+   L_orth = ||W_classifier^T × W_discriminator||²
+   Prevents over-alignment and class collapse
+
+┌────────────────────────────────────────────────────────────────┐
+│  TOTAL LOSS = L_cls + λ_adv·L_adv + λ_mmd·L_mmd + λ_orth·L_orth│
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 0.3 Modular Design for Future Extensions
+
+### Component Architecture
+
+```python
+# Modular design - easy to extend
+
+class DomainAdaptationLossManager:
+    """Plugin-based loss management"""
+
+    def __init__(self):
+        self.losses = {}  # Dict of loss functions
+        self.weights = {}  # Loss weighting
+
+    def register_loss(self, name, loss_fn, weight):
+        """Register a new loss component"""
+        self.losses[name] = loss_fn
+        self.weights[name] = weight
+
+    def compute_total_loss(self, model_outputs):
+        """Compute weighted sum of all losses"""
+        total = 0
+        loss_dict = {}
+
+        for name, loss_fn in self.losses.items():
+            loss_value = loss_fn(model_outputs)
+            loss_dict[name] = loss_value
+            total += self.weights[name] * loss_value
+
+        return total, loss_dict
+
+# Current Phase 1 Implementation:
+loss_manager = DomainAdaptationLossManager()
+loss_manager.register_loss('classification', classification_loss, weight=1.0)
+loss_manager.register_loss('adversarial', adversarial_loss, weight=0.5)
+loss_manager.register_loss('mmd', mmd_loss, weight=0.3)
+loss_manager.register_loss('orthogonal', orthogonal_loss, weight=0.1)
+
+# Future Phase 2 - Simply add:
+# loss_manager.register_loss('contrastive', contrastive_loss, weight=0.2)
+# No need to modify training loop!
+```
+
+### File Structure
+
+```
+classification_model/
+├── src/
+│   ├── models/
+│   │   ├── bma_mil_model.py              [EXISTING - Keep as is]
+│   │   └── domain_adaptive_mil.py        [NEW - Main DA model]
+│   │
+│   ├── losses/
+│   │   ├── __init__.py                   [NEW]
+│   │   ├── loss_manager.py               [NEW - Modular loss system]
+│   │   ├── adversarial_loss.py           [NEW - DANN with GRL]
+│   │   ├── mmd_loss.py                   [NEW - Multi-kernel MMD]
+│   │   ├── orthogonal_loss.py            [NEW - Orthogonality constraint]
+│   │   └── contrastive_loss.py           [FUTURE - Phase 2]
+│   │
+│   ├── data/
+│   │   ├── dataset.py                    [EXISTING - Keep]
+│   │   └── domain_dataset.py             [NEW - QLD1/QLD2 loader]
+│   │
+│   ├── training/
+│   │   ├── training.py                   [EXISTING - Keep]
+│   │   └── domain_adaptive_training.py   [NEW - DA training loop]
+│   │
+│   └── utils/
+│       ├── gradient_reversal.py          [NEW - GRL layer]
+│       └── domain_utils.py               [NEW - Helper functions]
+│
+├── configs/
+│   ├── config.py                         [EXISTING - Keep]
+│   └── domain_adaptation_config.py       [NEW - DA hyperparameters]
+│
+└── scripts/
+    ├── train.py                          [EXISTING - Keep]
+    └── train_domain_adaptation.py        [NEW - Main DA training script]
+```
+
+---
+
+## 0.4 Detailed Component Specifications
+
+### Component 1: Gradient Reversal Layer (GRL)
+
+**Purpose**: Enable adversarial training without separate discriminator optimizer
+
+**Implementation**:
+- Forward pass: Identity (pass features through unchanged)
+- Backward pass: Reverse gradients with scaling factor α
+- α schedule: 0 → 1 over training (gradual adaptation)
+
+**File**: `src/utils/gradient_reversal.py`
+
+---
+
+### Component 2: MMD Loss
+
+**Purpose**: Minimize statistical distance between source and target feature distributions
+
+**Configuration**:
+- Multi-kernel: 5 Gaussian kernels with different bandwidths
+- Kernel multiplier: 2.0 (bandwidth_k = 2^k)
+- Applied to bag-level features (after MIL aggregation)
+
+**File**: `src/losses/mmd_loss.py`
+
+---
+
+### Component 3: Orthogonal Constraint
+
+**Purpose**: **CRITICAL** - Prevent over-alignment and class collapse
+
+**Implementation**:
+- Compute: ||W_classifier^T × W_discriminator||²
+- Use first layer weights (common feature space)
+- Normalize weights before dot product
+- Target: Minimize orthogonality metric
+
+**File**: `src/losses/orthogonal_loss.py`
+
+**Why Critical**: Without this, DANN + MMD will over-align and destroy class boundaries!
+
+---
+
+### Component 4: Domain Adaptive MIL Model
+
+**Integration with Existing Code**:
+- **Reuse**: Existing ViT-R50 feature extractor
+- **Reuse**: Existing AttentionAggregator
+- **Reuse**: Existing class classifier structure
+- **Add**: Domain discriminator (new small network)
+- **Add**: Loss computation methods
+
+**File**: `src/models/domain_adaptive_mil.py`
+
+---
+
+### Component 5: Domain Dataset Loader
+
+**Purpose**: Load QLD1 and QLD2 with domain labels
+
+**CSV Format**:
+```csv
+pile,image_path,BMA_label,domain
+pile_001,/path/to/img1.jpg,0,QLD1
+pile_002,/path/to/img2.jpg,1,QLD1
+pile_100,/path/to/img100.jpg,2,QLD2
+...
+```
+
+**Features**:
+- Domain-stratified splitting (keep source/target separate)
+- Balanced sampling (equal batches from QLD1 and QLD2)
+- Compatible with existing BMADataset structure
+
+**File**: `src/data/domain_dataset.py`
+
+---
+
+## 0.5 Hyperparameter Configuration
+
+### Loss Weights
+
+| Loss Component | Symbol | Initial Value | Range | Schedule |
+|----------------|--------|---------------|-------|----------|
+| Classification | - | 1.0 | Fixed | None |
+| Adversarial | λ_adv | 0.5 | 0.3 - 1.0 | Constant or increase |
+| MMD | λ_mmd | 0.3 | 0.1 - 0.5 | Constant |
+| Orthogonal | λ_orth | 0.1 | 0.05 - 0.2 | Constant |
+
+### GRL Alpha Schedule
+
+```
+α(epoch) = 2 / (1 + exp(-10 * epoch / max_epochs)) - 1
+
+Epoch 0:   α ≈ 0.0  (no domain confusion)
+Epoch 25:  α ≈ 0.9  (strong domain confusion)
+Epoch 50+: α ≈ 1.0  (maximum domain confusion)
+```
+
+### Training Configuration
+
+```python
+# Domain Adaptation Training Config
+DOMAIN_ADAPTATION = {
+    # Data
+    'source_domain': 'QLD1',
+    'target_domain': 'QLD2',
+    'batch_size': 6,  # Same as existing
+    'domain_balanced_sampling': True,  # Equal source/target per batch
+
+    # Model
+    'use_pretrained_weights': 'models/best_bma_mil_model.pth',  # Optional
+    'freeze_feature_extractor': False,
+    'trainable_feature_layers': 2,  # Fine-tune last 2 ViT blocks
+
+    # Loss weights
+    'lambda_adv': 0.5,
+    'lambda_mmd': 0.3,
+    'lambda_orth': 0.1,
+
+    # Training
+    'num_epochs': 100,
+    'learning_rate': 1e-4,
+    'optimizer': 'adamw',
+    'weight_decay': 1e-5,
+
+    # Monitoring (detect over-alignment)
+    'monitor_source_accuracy': True,
+    'early_stop_on_source_drop': True,
+    'source_acc_threshold': 0.95,  # Stop if drops below 95% of baseline
+
+    # MMD
+    'mmd_kernel_mul': 2.0,
+    'mmd_kernel_num': 5,
+
+    # GRL schedule
+    'grl_alpha_schedule': 'exponential',
+    'grl_max_alpha': 1.0,
+}
+```
+
+---
+
+## 0.6 Training Protocol
+
+### Phase 1: Baseline Evaluation (Week 1)
+
+**Step 1.1**: Train baseline on QLD1 only
+- Standard MIL training (existing pipeline)
+- Save best checkpoint
+- Evaluate on QLD1 test set → Baseline accuracy
+
+**Step 1.2**: Evaluate zero-shot transfer to QLD2
+- Load QLD1-trained model
+- Evaluate on QLD2 test set → Zero-shot accuracy
+- Compute domain gap = QLD1_acc - QLD2_acc
+
+**Expected Results**:
+- QLD1 accuracy: 83-88%
+- QLD2 accuracy: 50-60%
+- Domain gap: 25-35%
+
+---
+
+### Phase 2: Domain Adaptation Training (Weeks 2-3)
+
+**Training Loop**:
+```
+For each epoch:
+    For each iteration:
+        # Sample balanced batch
+        source_batch, source_labels = sample_from_QLD1()
+        target_batch, target_labels = sample_from_QLD2()
+
+        # Forward pass
+        source_outputs = model(source_batch, domain='source')
+        target_outputs = model(target_batch, domain='target')
+
+        # Compute losses
+        L_cls = CE(source_outputs, source_labels) + CE(target_outputs, target_labels)
+        L_adv = adversarial_loss(source_features, target_features)
+        L_mmd = mmd_loss(source_features, target_features)
+        L_orth = orthogonal_constraint(model)
+
+        # Total loss
+        L_total = L_cls + λ_adv*L_adv + λ_mmd*L_mmd + λ_orth*L_orth
+
+        # Backprop and update
+        optimizer.zero_grad()
+        L_total.backward()
+        optimizer.step()
+
+    # Validation
+    qld1_val_acc = evaluate(model, qld1_val_set)
+    qld2_val_acc = evaluate(model, qld2_val_set)
+
+    # Over-alignment check
+    if qld1_val_acc < baseline_qld1_acc * 0.95:
+        print("WARNING: Source accuracy dropped - possible over-alignment!")
+        # Increase λ_orth or stop training
+```
+
+---
+
+### Phase 3: Evaluation (Week 3)
+
+**Metrics to Report**:
+
+1. **Accuracy**:
+   - QLD1 test accuracy (should maintain ~80-86%)
+   - QLD2 test accuracy (target: 75-82%)
+   - Domain gap (target: <10%)
+
+2. **Per-Class Performance**:
+   - F1-score for Cat1, Cat2, Cat3 on both domains
+   - Confusion matrices
+
+3. **Domain Alignment**:
+   - MMD distance (should decrease during training)
+   - Domain classification accuracy (should approach 50%)
+
+4. **Over-Alignment Monitoring**:
+   - Source accuracy trend (should not drop)
+   - Orthogonality loss trend
+   - Feature variance (should not collapse)
+
+---
+
+## 0.7 Expected Outcomes
+
+### Performance Targets
+
+| Metric | Before DA | After DA | Improvement |
+|--------|-----------|----------|-------------|
+| QLD1 Accuracy | 85% | 83-86% | Maintained |
+| QLD2 Accuracy | 55% | 75-82% | **+20-27%** |
+| Domain Gap | 30% | <10% | **-20%** |
+| Cat1 F1 (QLD2) | 0.40 | 0.70-0.80 | +0.30-0.40 |
+| Cat2 F1 (QLD2) | 0.50 | 0.72-0.82 | +0.22-0.32 |
+| Cat3 F1 (QLD2) | 0.60 | 0.75-0.85 | +0.15-0.25 |
+
+### Success Criteria
+
+✅ **Primary**:
+- QLD2 accuracy > 75%
+- QLD1 accuracy > 80% (maintained)
+- Domain gap < 10%
+
+✅ **Secondary**:
+- All classes F1 > 0.65 on QLD2
+- Training converges in <100 epochs
+- No over-alignment detected
+
+---
+
+## 0.8 Future Extensions (Phase 2)
+
+### Adding Contrastive Loss (Future)
+
+**When to Add**: If domain gap still >8% after DANN+MMD+Orth
+
+**How to Add** (modular!):
+```python
+# Simply register new loss - no other changes needed!
+from src.losses.contrastive_loss import ContrastiveDomainLoss
+
+contrastive_loss = ContrastiveDomainLoss(temperature=0.07)
+loss_manager.register_loss('contrastive', contrastive_loss, weight=0.2)
+
+# Update config
+DOMAIN_ADAPTATION['lambda_contrastive'] = 0.2
+
+# Done! Training loop automatically uses it.
+```
+
+**Expected Benefit**: Additional 2-3% accuracy on QLD2
+
+---
+
+## 0.9 Implementation Checklist
+
+### Week 1: Foundation
+- [ ] Create `src/utils/gradient_reversal.py` (GRL layer)
+- [ ] Create `src/losses/mmd_loss.py` (multi-kernel MMD)
+- [ ] Create `src/losses/orthogonal_loss.py` (orthogonality constraint)
+- [ ] Create `src/losses/adversarial_loss.py` (DANN loss)
+- [ ] Create `src/losses/loss_manager.py` (modular loss system)
+
+### Week 2: Model & Data
+- [ ] Create `src/models/domain_adaptive_mil.py` (main DA model)
+- [ ] Create `src/data/domain_dataset.py` (QLD1/QLD2 loader)
+- [ ] Create `configs/domain_adaptation_config.py` (DA config)
+- [ ] Test model forward pass and loss computation
+
+### Week 3: Training & Evaluation
+- [ ] Create `src/training/domain_adaptive_training.py` (DA training loop)
+- [ ] Create `scripts/train_domain_adaptation.py` (main script)
+- [ ] Implement over-alignment monitoring
+- [ ] Create evaluation script for cross-domain metrics
+
+### Week 4: Experiments
+- [ ] Baseline: Train on QLD1, test on QLD1 and QLD2
+- [ ] Experiment 1: DANN only
+- [ ] Experiment 2: MMD only
+- [ ] Experiment 3: DANN + MMD
+- [ ] Experiment 4: DANN + MMD + Orthogonal (final)
+- [ ] Hyperparameter tuning (λ_adv, λ_mmd, λ_orth)
+
+---
+
+## 0.10 Key Design Decisions - Summary
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Method** | DANN + MMD + Orthogonal | Stable, proven, complementary |
+| **Scenario** | Supervised DA | Both domains labeled (use target labels!) |
+| **Modularity** | Plugin-based loss manager | Easy to add contrastive loss later |
+| **Over-alignment** | Orthogonal constraint | Critical safeguard for hybrid approach |
+| **Integration** | Extend existing MIL model | Reuse ViT-R50 + attention aggregator |
+| **Data** | QLD1 (source), QLD2 (target) | 3 classes each, fully labeled |
+| **Training** | Joint optimization | Both domains in each batch |
+| **Monitoring** | Source accuracy tracking | Early detection of over-alignment |
+
+---
+
+## ✅ READY FOR REVIEW
+
+**This is the finalized plan. Please review and approve before implementation begins.**
+
+**Key Questions for Review**:
+1. ✓ Approve DANN + MMD + Orthogonal constraint approach?
+2. ✓ Confirm QLD1 (source), QLD2 (target), both with 3 classes?
+3. ✓ Confirm both datasets have labels (supervised DA)?
+4. ✓ Approve modular design for future contrastive loss?
+5. ✓ Any additional requirements or constraints?
+
+**Next Steps After Approval**:
+- Implement components in order (GRL → Losses → Model → Training)
+- Test each component independently
+- Integrate and run baseline evaluation
+- Begin domain adaptation experiments
+
+---
+
 ## 1. Problem Analysis
 
 ### 1.1 Domain Shift Characteristics in Mine Sites
