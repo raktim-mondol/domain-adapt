@@ -168,19 +168,25 @@ class BMA_MIL_Classifier(nn.Module):
             nn.Linear(hidden_dim // 2, num_classes)
         )
 
-    def forward(self, bag):
+    def forward(self, bag, return_features=False):
         """
         Forward pass for one bag (image)
-        
+
         Args:
             bag: Tensor [num_patches, 3, H, W] - raw patches from one image
-        
+            return_features: If True, also return bag-level features
+
         Returns:
-            logits: Tensor [num_classes] - classification logits
-            attention_weights: Tensor [num_patches] - attention weights
+            If return_features=False:
+                logits: Tensor [num_classes] - classification logits
+                attention_weights: Tensor [num_patches] - attention weights
+            If return_features=True:
+                logits: Tensor [num_classes] - classification logits
+                attention_weights: Tensor [num_patches] - attention weights
+                bag_feature: Tensor [hidden_dim] - bag-level features (before classifier)
         """
         num_patches = bag.shape[0]
-        
+
         # Step 1: Extract features from each patch
         if self.training and not any(p.requires_grad for p in self.feature_extractor.parameters()):
             # Feature extractor is frozen, use no_grad for efficiency
@@ -189,13 +195,16 @@ class BMA_MIL_Classifier(nn.Module):
         else:
             # Feature extractor is trainable or in eval mode
             patch_features = self.feature_extractor(bag)  # [num_patches, feature_dim]
-        
+
         # Step 2: MIL aggregation (attention-based)
-        bag_feature, attention_weights = self.aggregator(patch_features)  # [feature_dim], [num_patches]
-        
+        bag_feature, attention_weights = self.aggregator(patch_features)  # [hidden_dim], [num_patches]
+
         # Step 3: Classification
         logits = self.classifier(bag_feature)  # [num_classes]
-        
+
+        if return_features:
+            return logits, attention_weights, bag_feature
+
         return logits, attention_weights
     
     def predict_bag(self, bag):

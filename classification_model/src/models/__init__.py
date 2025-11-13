@@ -6,8 +6,16 @@ from .bma_mil_model import (
     BMA_MIL_Classifier,
     AttentionAggregator
 )
+from .domain_discriminator import (
+    GradientReversal,
+    DomainDiscriminator,
+    DomainAdaptationModel
+)
 
 __all__ = [
     'BMA_MIL_Classifier',
-    'AttentionAggregator'
+    'AttentionAggregator',
+    'GradientReversal',
+    'DomainDiscriminator',
+    'DomainAdaptationModel'
 ]
