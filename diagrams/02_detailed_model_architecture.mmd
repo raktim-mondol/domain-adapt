@@ -1,16 +1,16 @@
 graph LR
-    subgraph "Input Layer"
+    subgraph InputLayer["Input Layer"]
         IMG[Image<br/>4032×3024]
     end
 
-    subgraph "Patch Extraction"
+    subgraph PatchExtraction["Patch Extraction"]
         P1[Patch 1<br/>224×224]
         P2[Patch 2<br/>224×224]
         PDOT[...]
         P12[Patch 12<br/>224×224]
     end
 
-    subgraph "Feature Extraction"
+    subgraph FeatureExtraction["Feature Extraction"]
         VIT[ViT-R50 Backbone<br/>Pretrained IN21K<br/>Frozen/Fine-tuned]
         F1[Features<br/>768-dim]
         F2[Features<br/>768-dim]
@@ -18,13 +18,13 @@ graph LR
         F12[Features<br/>768-dim]
     end
 
-    subgraph "MIL Aggregation"
+    subgraph MILAggregation["MIL Aggregation"]
         ATT[Attention Mechanism<br/>Tanh + Softmax]
         ENC[Feature Encoder<br/>Linear + ReLU + Dropout]
         BAG[Bag Feature z<br/>512-dim]
     end
 
-    subgraph "Task Head"
+    subgraph TaskHead["Task Head"]
         CLS1[Linear 512→256]
         RELU1[ReLU]
         DROP1[Dropout 0.3]
@@ -32,7 +32,7 @@ graph LR
         LOGITS[Class Logits<br/>3-dim]
     end
 
-    subgraph "Domain Head"
+    subgraph DomainHead["Domain Head"]
         GRL_BOX[Gradient Reversal<br/>λ schedule: 0→1]
         DOM1[Linear 512→256<br/>Spectral Norm]
         RELU2[ReLU]

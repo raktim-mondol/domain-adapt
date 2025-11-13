@@ -1,5 +1,5 @@
 graph LR
-    subgraph "Forward Pass"
+    subgraph ForwardPass["Forward Pass"]
         F_IN[Input: z<br/>512-dim features]
         F_IDEN[Identity: y = x]
         F_OUT[Output: z<br/>Unchanged]
@@ -7,15 +7,15 @@ graph LR
         F_IDEN --> F_OUT
     end
 
-    subgraph "Backward Pass"
-        B_IN[Gradient: ∂L/∂z]
-        B_REV[Reverse: -λ·∂L/∂z]
-        B_OUT[Updated: -λ·∂L/∂z]
+    subgraph BackwardPass["Backward Pass"]
+        B_IN[Gradient: dL/dz]
+        B_REV[Reverse: -λ · dL/dz]
+        B_OUT[Updated: -λ · dL/dz]
         B_IN --> B_REV
         B_REV --> B_OUT
     end
 
-    subgraph "Effect"
+    subgraph Effect
         EFF1[Discriminator tries to<br/>classify domains correctly]
         EFF2[Feature extractor receives<br/>reversed gradients]
         EFF3[Features become<br/>domain-invariant]

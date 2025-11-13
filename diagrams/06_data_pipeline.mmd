@@ -1,5 +1,5 @@
 graph TD
-    subgraph "Data Preparation"
+    subgraph DataPreparation["Data Preparation"]
         CSV1[QLD1 CSV<br/>pile, image_path, label]
         CSV2[QLD2 CSV<br/>pile, image_path, label]
 
@@ -12,19 +12,19 @@ graph TD
         DS2_VAL[QLD2 Val Dataset<br/>16 bags]
     end
 
-    subgraph "DataLoaders"
+    subgraph DataLoaders
         DL1_TR[Source Train Loader<br/>Batch=2, Shuffle=True]
         DL1_VAL[Source Val Loader<br/>Batch=2, Shuffle=False]
         DL2_TR[Target Train Loader<br/>Batch=2, Shuffle=True]
         DL2_VAL[Target Val Loader<br/>Batch=2, Shuffle=False]
     end
 
-    subgraph "Batch Processing"
-        SYNC[Synchronized Iteration<br/>max(len(src), len(tgt))]
+    subgraph BatchProcessing["Batch Processing"]
+        SYNC[Synchronized Iteration<br/>max len src, tgt]
         CYCLE[Cycle shorter loader]
     end
 
-    subgraph "Training"
+    subgraph Training
         TRAIN[Forward → Loss → Backward → Step]
         VAL[Validate Both Domains]
     end

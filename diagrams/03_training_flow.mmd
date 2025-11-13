@@ -1,47 +1,47 @@
 flowchart TD
     START([Training Start<br/>Epoch e=0])
 
-    subgraph "Data Loading"
+    subgraph DataLoading["Data Loading"]
         SRC_BATCH[Load Source Batch<br/>QLD1: n samples]
         TGT_BATCH[Load Target Batch<br/>QLD2: n samples]
     end
 
-    subgraph "Forward Pass"
+    subgraph ForwardPass["Forward Pass"]
         FWD_SRC[Forward Source<br/>logits_s, z_s, d_s]
         FWD_TGT[Forward Target<br/>logits_t, z_t, d_t]
     end
 
-    subgraph "Loss Computation"
-        RAMP{Compute Rampup<br/>λ = e/5 if e<5<br/>else 1.0}
+    subgraph LossComputation["Loss Computation"]
+        RAMP{Compute Rampup<br/>λ = e/5 if e less than 5<br/>else 1.0}
 
-        CLS_SRC[L_cls_src = CE(logits_s, y_s)]
-        CLS_TGT[L_cls_tgt = CE(logits_t, y_t)]
+        CLS_SRC[L_cls_src = CrossEntropy source]
+        CLS_TGT[L_cls_tgt = CrossEntropy target]
         CLS_TOTAL[L_cls = L_cls_src + L_cls_tgt]
 
-        ADV_SRC[L_adv_src = BCE(d_s, 0)]
-        ADV_TGT[L_adv_tgt = BCE(d_t, 1)]
+        ADV_SRC[L_adv_src = BCE domain source]
+        ADV_TGT[L_adv_tgt = BCE domain target]
         ADV_TOTAL[L_adv = L_adv_src + L_adv_tgt]
 
-        MMD_CALC[L_mmd = Class-Cond-MMD(z_s, z_t)]
+        MMD_CALC[L_mmd = Class-Cond-MMD z_s, z_t]
 
-        ORTH_CALC[L_orth = ||W_cls·W_dom^T||_F]
+        ORTH_CALC[L_orth = Frobenius norm<br/>W_cls · W_dom^T]
 
         TOTAL[L_total = L_cls +<br/>λ_adv·L_adv +<br/>λ_mmd·L_mmd +<br/>λ_orth·L_orth]
     end
 
-    subgraph "Optimization"
+    subgraph Optimization
         BACKWARD[Backward Pass<br/>Compute Gradients]
         CLIP[Gradient Clipping<br/>max_norm=5.0]
         STEP[Optimizer Step<br/>Update Weights]
     end
 
-    subgraph "Validation"
+    subgraph Validation
         VAL_SRC[Validate Source<br/>Pile-level metrics]
         VAL_TGT[Validate Target<br/>Pile-level metrics]
         METRICS[Compute Metrics<br/>Acc, F1 per domain]
     end
 
-    subgraph "Checkpoint"
+    subgraph Checkpoint
         CHECK{Target F1<br/>improved?}
         SAVE[Save Best Model<br/>+ History]
     end

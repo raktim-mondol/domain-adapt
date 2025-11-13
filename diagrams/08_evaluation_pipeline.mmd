@@ -1,5 +1,5 @@
 graph TD
-    subgraph "Bag-Level Prediction"
+    subgraph BagLevelPrediction["Bag-Level Prediction"]
         BAG1[Bag 1: Image A<br/>12 patches]
         BAG2[Bag 2: Image B<br/>12 patches]
         BAG3[Bag 3: Image C<br/>12 patches]
@@ -11,13 +11,13 @@ graph TD
         PREDN[Prediction: pn<br/>3-class probs]
     end
 
-    subgraph "Pile-Level Aggregation"
-        GROUP[Group by pile_id<br/>Pile X: {p1, p2, p3}]
-        POOL[Mean Pooling<br/>p_pile = mean(p1, p2, p3)]
-        ARGMAX[Final Prediction<br/>class = argmax(p_pile)]
+    subgraph PileLevelAggregation["Pile-Level Aggregation"]
+        GROUP[Group by pile_id<br/>Pile X: p1, p2, p3]
+        POOL[Mean Pooling<br/>p_pile = mean of probs]
+        ARGMAX[Final Prediction<br/>class = argmax p_pile]
     end
 
-    subgraph "Metrics"
+    subgraph Metrics
         ACC[Pile-level Accuracy]
         F1W[Weighted F1-Score]
         F1C[Per-class F1-Score]
