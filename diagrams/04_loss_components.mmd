@@ -1,0 +1,52 @@
+graph TB
+    subgraph "L_cls: Classification Loss"
+        CLS_IN[Source logits + Target logits<br/>Source labels + Target labels]
+        CLS_CE1[CE_source = -Σ y_s·log(σ(logits_s))]
+        CLS_CE2[CE_target = -Σ y_t·log(σ(logits_t))]
+        CLS_OUT[L_cls = CE_source + CE_target]
+        CLS_IN --> CLS_CE1 & CLS_CE2
+        CLS_CE1 & CLS_CE2 --> CLS_OUT
+    end
+
+    subgraph "L_adv: Adversarial Loss DANN"
+        ADV_IN[z_s, z_t through GRL]
+        GRL_OP[GRL: Forward=Identity<br/>Backward=-λ·grad]
+        DISC_OP[Domain Discriminator<br/>Spectral Norm MLP]
+        ADV_BCE[BCE with Label Smoothing<br/>Source→0, Target→1]
+        ADV_OUT[L_adv = BCE(d_s, 0) + BCE(d_t, 1)]
+        ADV_IN --> GRL_OP
+        GRL_OP --> DISC_OP
+        DISC_OP --> ADV_BCE
+        ADV_BCE --> ADV_OUT
+    end
+
+    subgraph "L_mmd: Maximum Mean Discrepancy"
+        MMD_IN[z_s: Source features<br/>z_t: Target features<br/>y_s, y_t: Labels]
+        MMD_SPLIT[Split by Class<br/>c ∈ {1,2,3}]
+        MMD_KERNEL[Multi-kernel RBF<br/>σ ∈ {0.5, 1.0, 2.0, 4.0}]
+        MMD_CALC[MMD²_c = E[k(x,x')] +<br/>E[k(y,y')] - 2E[k(x,y)]]
+        MMD_SUM[Sum over classes & kernels]
+        MMD_OUT[L_mmd = Σ_c Σ_σ MMD²_c,σ]
+        MMD_IN --> MMD_SPLIT
+        MMD_SPLIT --> MMD_KERNEL
+        MMD_KERNEL --> MMD_CALC
+        MMD_CALC --> MMD_SUM
+        MMD_SUM --> MMD_OUT
+    end
+
+    subgraph "L_orth: Orthogonal Regularization"
+        ORTH_IN[W_cls: Classifier weights<br/>W_dom: Discriminator weights]
+        ORTH_PROD[Product: W_cls·W_dom^T]
+        ORTH_NORM[Frobenius Norm<br/>||·||_F]
+        ORTH_SCALE[Normalize by<br/>||W_cls||_F·||W_dom||_F]
+        ORTH_OUT[L_orth = ||W_cls·W_dom^T||²_F /<br/>(||W_cls||_F·||W_dom||_F)]
+        ORTH_IN --> ORTH_PROD
+        ORTH_PROD --> ORTH_NORM
+        ORTH_NORM --> ORTH_SCALE
+        ORTH_SCALE --> ORTH_OUT
+    end
+
+    style CLS_OUT fill:#99ccff
+    style ADV_OUT fill:#ffcc99
+    style MMD_OUT fill:#ff9999
+    style ORTH_OUT fill:#99ff99

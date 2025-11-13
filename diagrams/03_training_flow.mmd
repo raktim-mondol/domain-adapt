@@ -1,0 +1,84 @@
+flowchart TD
+    START([Training Start<br/>Epoch e=0])
+
+    subgraph "Data Loading"
+        SRC_BATCH[Load Source Batch<br/>QLD1: n samples]
+        TGT_BATCH[Load Target Batch<br/>QLD2: n samples]
+    end
+
+    subgraph "Forward Pass"
+        FWD_SRC[Forward Source<br/>logits_s, z_s, d_s]
+        FWD_TGT[Forward Target<br/>logits_t, z_t, d_t]
+    end
+
+    subgraph "Loss Computation"
+        RAMP{Compute Rampup<br/>λ = e/5 if e<5<br/>else 1.0}
+
+        CLS_SRC[L_cls_src = CE(logits_s, y_s)]
+        CLS_TGT[L_cls_tgt = CE(logits_t, y_t)]
+        CLS_TOTAL[L_cls = L_cls_src + L_cls_tgt]
+
+        ADV_SRC[L_adv_src = BCE(d_s, 0)]
+        ADV_TGT[L_adv_tgt = BCE(d_t, 1)]
+        ADV_TOTAL[L_adv = L_adv_src + L_adv_tgt]
+
+        MMD_CALC[L_mmd = Class-Cond-MMD(z_s, z_t)]
+
+        ORTH_CALC[L_orth = ||W_cls·W_dom^T||_F]
+
+        TOTAL[L_total = L_cls +<br/>λ_adv·L_adv +<br/>λ_mmd·L_mmd +<br/>λ_orth·L_orth]
+    end
+
+    subgraph "Optimization"
+        BACKWARD[Backward Pass<br/>Compute Gradients]
+        CLIP[Gradient Clipping<br/>max_norm=5.0]
+        STEP[Optimizer Step<br/>Update Weights]
+    end
+
+    subgraph "Validation"
+        VAL_SRC[Validate Source<br/>Pile-level metrics]
+        VAL_TGT[Validate Target<br/>Pile-level metrics]
+        METRICS[Compute Metrics<br/>Acc, F1 per domain]
+    end
+
+    subgraph "Checkpoint"
+        CHECK{Target F1<br/>improved?}
+        SAVE[Save Best Model<br/>+ History]
+    end
+
+    START --> SRC_BATCH & TGT_BATCH
+    SRC_BATCH --> FWD_SRC
+    TGT_BATCH --> FWD_TGT
+
+    FWD_SRC & FWD_TGT --> RAMP
+
+    RAMP --> CLS_SRC & CLS_TGT
+    CLS_SRC & CLS_TGT --> CLS_TOTAL
+
+    RAMP --> ADV_SRC & ADV_TGT
+    ADV_SRC & ADV_TGT --> ADV_TOTAL
+
+    RAMP --> MMD_CALC
+    RAMP --> ORTH_CALC
+
+    CLS_TOTAL & ADV_TOTAL & MMD_CALC & ORTH_CALC --> TOTAL
+
+    TOTAL --> BACKWARD
+    BACKWARD --> CLIP
+    CLIP --> STEP
+
+    STEP --> VAL_SRC & VAL_TGT
+    VAL_SRC & VAL_TGT --> METRICS
+
+    METRICS --> CHECK
+    CHECK -->|Yes| SAVE
+    CHECK -->|No| NEXT
+    SAVE --> NEXT
+
+    NEXT{More<br/>Epochs?}
+    NEXT -->|Yes| START
+    NEXT -->|No| END([Training Complete])
+
+    style TOTAL fill:#ffcccc
+    style SAVE fill:#ccffcc
+    style RAMP fill:#ffffcc

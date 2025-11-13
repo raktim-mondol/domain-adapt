@@ -1,5 +1,7 @@
 # Domain Adaptation Architecture Documentation
 
+> **Note:** Individual diagrams are available as separate `.mmd` files in the [`diagrams/`](diagrams/) folder for direct viewing on GitHub.
+
 ## Proposed Model Name
 
 ### **AdaptBMA** (Adaptive Bag-based Multi-instance Aggregation)
@@ -15,7 +17,11 @@
 
 ## Architecture Diagrams
 
+> 💡 **View on GitHub:** All diagrams are available as individual `.mmd` files in the [`diagrams/`](diagrams/) folder with automatic Mermaid rendering.
+
 ### 1. High-Level System Architecture
+
+📄 [View diagram file](diagrams/01_high_level_architecture.mmd)
 
 ```mermaid
 graph TB
@@ -85,6 +91,8 @@ graph TB
 ---
 
 ### 2. Detailed Model Architecture
+
+📄 [View diagram file](diagrams/02_detailed_model_architecture.mmd)
 
 ```mermaid
 graph LR
@@ -159,6 +167,8 @@ graph LR
 ---
 
 ### 3. Domain Adaptation Training Flow
+
+📄 [View diagram file](diagrams/03_training_flow.mmd)
 
 ```mermaid
 flowchart TD
@@ -251,6 +261,8 @@ flowchart TD
 
 ### 4. Loss Component Details
 
+📄 [View diagram file](diagrams/04_loss_components.mmd)
+
 ```mermaid
 graph TB
     subgraph "L_cls: Classification Loss"
@@ -310,6 +322,8 @@ graph TB
 
 ### 5. Training Strategy Overview
 
+📄 [View diagram file](diagrams/05_training_strategy.mmd)
+
 ```mermaid
 timeline
     title AdaptBMA Training Strategy
@@ -350,6 +364,8 @@ timeline
 ---
 
 ### 6. Data Flow Pipeline
+
+📄 [View diagram file](diagrams/06_data_pipeline.mmd)
 
 ```mermaid
 graph TD
@@ -410,6 +426,8 @@ graph TD
 
 ### 7. Gradient Reversal Layer Mechanism
 
+📄 [View diagram file](diagrams/07_gradient_reversal.mmd)
+
 ```mermaid
 graph LR
     subgraph "Forward Pass"
@@ -447,6 +465,8 @@ graph LR
 ---
 
 ### 8. Evaluation Pipeline
+
+📄 [View diagram file](diagrams/08_evaluation_pipeline.mmd)
 
 ```mermaid
 graph TD
