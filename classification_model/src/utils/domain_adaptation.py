@@ -3,6 +3,7 @@ Domain Adaptation Training Utilities
 Handles dual-domain training with DANN, MMD, and Orthogonal losses
 """
 
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -227,13 +228,13 @@ def train_one_epoch_domain_adaptation(
 
         optimizer.step()
 
-        # Track metrics
+        # Track metrics (handle both tensor and float cases)
         epoch_loss_total += loss_total.item()
         epoch_loss_cls_source += loss_cls_source.item()
         epoch_loss_cls_target += loss_cls_target.item()
         epoch_loss_adv += loss_adv.item()
-        epoch_loss_mmd += loss_mmd.item()
-        epoch_loss_orth += loss_orth.item()
+        epoch_loss_mmd += loss_mmd.item() if torch.is_tensor(loss_mmd) else loss_mmd
+        epoch_loss_orth += loss_orth.item() if torch.is_tensor(loss_orth) else loss_orth
 
         # Track predictions
         source_preds.extend(torch.argmax(source_batch_logits, dim=1).cpu().numpy())
@@ -242,11 +243,12 @@ def train_one_epoch_domain_adaptation(
         target_labels.extend(target_labels_batch.cpu().numpy())
 
         # Update progress bar
+        mmd_val = loss_mmd.item() if torch.is_tensor(loss_mmd) else loss_mmd
         train_pbar.set_postfix({
             'Loss': f'{loss_total.item():.4f}',
             'Cls': f'{loss_cls.item():.4f}',
             'Adv': f'{loss_adv.item():.4f}',
-            'MMD': f'{loss_mmd.item():.4f}',
+            'MMD': f'{mmd_val:.4f}',
             'λ_adv': f'{lambda_adv:.3f}'
         })
 
@@ -507,6 +509,10 @@ def train_model_domain_adaptation(
         if current_metric > best_metric:
             best_metric = current_metric
             model_path = config.BEST_MODEL_PATH if fold is None else f'models/best_da_model_fold{fold}.pth'
+
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+
             torch.save({
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
