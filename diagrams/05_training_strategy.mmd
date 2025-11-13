@@ -1,34 +1,18 @@
 timeline
     title AdaptBMA Training Strategy
-
-    section Phase 1: Warmup (Epochs 0-2)
-        Ramp-up Adaptation : λ_adv: 0.0 → 0.4
-                           : λ_mmd: 0.0 → 0.4
-                           : λ_grl: 0.0 → 0.4
-        Focus : Classification on both domains
-              : Gentle introduction of adaptation
-
-    section Phase 2: Adaptation (Epochs 3-5)
-        Full Adaptation : λ_adv: 0.4 → 1.0
-                        : λ_mmd: 0.4 → 0.5
-                        : λ_grl: 0.4 → 1.0
-        Focus : Domain confusion via DANN
-              : Distribution alignment via MMD
-              : Feature orthogonality
-
-    section Phase 3: Fine-tuning (Epochs 6+)
-        Stable Training : All λ values constant
-                        : λ_adv = 1.0
-                        : λ_mmd = 0.5
-                        : λ_orth = 0.01
-        Focus : Convergence
-              : Target domain improvement
-              : Source domain preservation
-
-    section Validation
-        Every Epoch : Bag-level predictions
-                    : Pile-level aggregation
-                    : Source & Target metrics
-        Early Stop : Monitor Target F1
-                   : Patience = 10 epochs
-                   : Save best model
+    section Phase 1 Warmup Epochs 0-2
+        Ramp-up lambda_adv 0.0 to 0.4 : lambda_mmd 0.0 to 0.4
+        Ramp-up lambda_grl 0.0 to 0.4 : Focus on classification
+        Gentle introduction of adaptation : Both domains trained
+    section Phase 2 Adaptation Epochs 3-5
+        Full lambda_adv 0.4 to 1.0 : lambda_mmd 0.4 to 0.5
+        Full lambda_grl 0.4 to 1.0 : Domain confusion via DANN
+        Distribution alignment via MMD : Feature orthogonality enforced
+    section Phase 3 Fine-tuning Epochs 6+
+        Stable lambda_adv 1.0 : lambda_mmd 0.5
+        Stable lambda_orth 0.01 : All values constant
+        Convergence and target improvement : Source domain preservation
+    section Validation Every Epoch
+        Bag-level predictions : Pile-level aggregation
+        Source and Target metrics : Monitor Target F1
+        Early stopping patience 10 : Save best model checkpoint
