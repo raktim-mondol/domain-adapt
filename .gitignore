@@ -1,0 +1,30 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Testing dummy data
+classification_model/data/qld1_*
+classification_model/data/qld2_*
+
+# Model checkpoints
+classification_model/models/*.pth
+classification_model/models/*.pt
+
+# Results and logs
+classification_model/results/*.png
+classification_model/results/*.pdf
+classification_model/logs/*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
