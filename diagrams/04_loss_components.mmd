@@ -1,0 +1,52 @@
+graph TB
+    subgraph ClsLoss["L_cls: Classification Loss"]
+        CLS_IN[Source logits + Target logits<br/>Source labels + Target labels]
+        CLS_CE1[CE_source = negative sum<br/>y_s · log softmax logits_s]
+        CLS_CE2[CE_target = negative sum<br/>y_t · log softmax logits_t]
+        CLS_OUT[L_cls = CE_source + CE_target]
+        CLS_IN --> CLS_CE1 & CLS_CE2
+        CLS_CE1 & CLS_CE2 --> CLS_OUT
+    end
+
+    subgraph AdvLoss["L_adv: Adversarial Loss DANN"]
+        ADV_IN[z_s, z_t through GRL]
+        GRL_OP[GRL: Forward=Identity<br/>Backward= -λ·grad]
+        DISC_OP[Domain Discriminator<br/>Spectral Norm MLP]
+        ADV_BCE[BCE with Label Smoothing<br/>Source→0, Target→1]
+        ADV_OUT[L_adv = BCE d_s + BCE d_t]
+        ADV_IN --> GRL_OP
+        GRL_OP --> DISC_OP
+        DISC_OP --> ADV_BCE
+        ADV_BCE --> ADV_OUT
+    end
+
+    subgraph MMDLoss["L_mmd: Maximum Mean Discrepancy"]
+        MMD_IN[z_s: Source features<br/>z_t: Target features<br/>y_s, y_t: Labels]
+        MMD_SPLIT[Split by Class<br/>c in 1,2,3]
+        MMD_KERNEL[Multi-kernel RBF<br/>σ in 0.5, 1.0, 2.0, 4.0]
+        MMD_CALC[MMD squared per class<br/>E k xx + E k yy - 2 E k xy]
+        MMD_SUM[Sum over classes & kernels]
+        MMD_OUT[L_mmd = Sum over c and σ]
+        MMD_IN --> MMD_SPLIT
+        MMD_SPLIT --> MMD_KERNEL
+        MMD_KERNEL --> MMD_CALC
+        MMD_CALC --> MMD_SUM
+        MMD_SUM --> MMD_OUT
+    end
+
+    subgraph OrthLoss["L_orth: Orthogonal Regularization"]
+        ORTH_IN[W_cls: Classifier weights<br/>W_dom: Discriminator weights]
+        ORTH_PROD[Product: W_cls · W_dom^T]
+        ORTH_NORM[Frobenius Norm<br/>squared]
+        ORTH_SCALE[Normalize by<br/>W_cls_norm · W_dom_norm]
+        ORTH_OUT[L_orth = normalized<br/>Frobenius norm squared]
+        ORTH_IN --> ORTH_PROD
+        ORTH_PROD --> ORTH_NORM
+        ORTH_NORM --> ORTH_SCALE
+        ORTH_SCALE --> ORTH_OUT
+    end
+
+    style CLS_OUT fill:#99ccff
+    style ADV_OUT fill:#ffcc99
+    style MMD_OUT fill:#ff9999
+    style ORTH_OUT fill:#99ff99

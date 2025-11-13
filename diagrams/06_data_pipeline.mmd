@@ -1,0 +1,52 @@
+graph TD
+    subgraph DataPreparation["Data Preparation"]
+        CSV1[QLD1 CSV<br/>pile, image_path, label]
+        CSV2[QLD2 CSV<br/>pile, image_path, label]
+
+        SPLIT1[Train/Val Split<br/>70/30 at pile-level]
+        SPLIT2[Train/Val Split<br/>70/30 at pile-level]
+
+        DS1_TR[QLD1 Train Dataset<br/>40 bags]
+        DS1_VAL[QLD1 Val Dataset<br/>20 bags]
+        DS2_TR[QLD2 Train Dataset<br/>32 bags]
+        DS2_VAL[QLD2 Val Dataset<br/>16 bags]
+    end
+
+    subgraph DataLoaders
+        DL1_TR[Source Train Loader<br/>Batch=2, Shuffle=True]
+        DL1_VAL[Source Val Loader<br/>Batch=2, Shuffle=False]
+        DL2_TR[Target Train Loader<br/>Batch=2, Shuffle=True]
+        DL2_VAL[Target Val Loader<br/>Batch=2, Shuffle=False]
+    end
+
+    subgraph BatchProcessing["Batch Processing"]
+        SYNC[Synchronized Iteration<br/>max len src, tgt]
+        CYCLE[Cycle shorter loader]
+    end
+
+    subgraph Training
+        TRAIN[Forward → Loss → Backward → Step]
+        VAL[Validate Both Domains]
+    end
+
+    CSV1 --> SPLIT1
+    CSV2 --> SPLIT2
+    SPLIT1 --> DS1_TR & DS1_VAL
+    SPLIT2 --> DS2_TR & DS2_VAL
+
+    DS1_TR --> DL1_TR
+    DS1_VAL --> DL1_VAL
+    DS2_TR --> DL2_TR
+    DS2_VAL --> DL2_VAL
+
+    DL1_TR & DL2_TR --> SYNC
+    SYNC --> CYCLE
+    CYCLE --> TRAIN
+
+    DL1_VAL & DL2_VAL --> VAL
+
+    TRAIN --> VAL
+
+    style TRAIN fill:#ffcccc
+    style VAL fill:#ccffcc
+    style SYNC fill:#ffffcc

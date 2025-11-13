@@ -107,7 +107,7 @@ class Config:
     
     # Data Augmentation Parameters
     HISTOGRAM_METHOD = 'clahe'
-    
+
     # Augmentation strategy
     INCLUDE_ORIGINAL_AND_AUGMENTED = True  # If True: includes original patches
                                             # If False: only augmented patches
@@ -116,12 +116,12 @@ class Config:
                                             # 2: 24 patches (12 original + 12 augmented) if INCLUDE_ORIGINAL_AND_AUGMENTED=True
                                             # 3: 36 patches (12 original + 36 augmented) if INCLUDE_ORIGINAL_AND_AUGMENTED=True
                                             #    OR 36 patches (only augmented) if INCLUDE_ORIGINAL_AND_AUGMENTED=False
-    
+
     # Enable/disable augmentation types
     ENABLE_GEOMETRIC_AUG = True
     ENABLE_COLOR_AUG = False
     ENABLE_NOISE_AUG = False
-    
+
     # Geometric augmentation parameters
     ROTATION_RANGE = 15
     ZOOM_RANGE = (0.9, 2.5)
@@ -129,15 +129,63 @@ class Config:
     HORIZONTAL_FLIP = True
     #VERTICAL_FLIP = True
     #GEOMETRIC_PROB = 0.5
-    
+
     # Color augmentation parameters
     BRIGHTNESS_RANGE = (0.8, 1.2)
     CONTRAST_RANGE = (0.8, 1.2)
     SATURATION_RANGE = (0.8, 1.2)
     HUE_RANGE = (-0.1, 0.1)
     COLOR_PROB = 0.5
-    
+
     # Noise and blur parameters
     NOISE_STD = 0.01
     BLUR_SIGMA = (0.1, 2.0)
     NOISE_PROB = 0.3
+
+    # ==================== Domain Adaptation Parameters ====================
+
+    # Enable domain adaptation
+    USE_DOMAIN_ADAPTATION = False  # Set to True to enable domain adaptation
+
+    # Domain data paths (QLD1 = source, QLD2 = target)
+    QLD1_DATA_PATH = 'data/qld1_data.csv'  # Source domain data
+    QLD2_DATA_PATH = 'data/qld2_data.csv'  # Target domain data
+    QLD1_IMAGE_DIR = 'data/qld1_images'    # Source domain images
+    QLD2_IMAGE_DIR = 'data/qld2_images'    # Target domain images
+
+    # Domain adaptation loss weights
+    LAMBDA_ADV = 1.0          # Weight for adversarial domain confusion loss (DANN)
+    LAMBDA_MMD = 0.5          # Weight for MMD distribution alignment loss
+    LAMBDA_ORTH = 0.01        # Weight for orthogonal regularization loss
+
+    # Gradient Reversal Layer (GRL) coefficient
+    GRL_COEFF = 1.0           # Gradient reversal scaling factor (tied to LAMBDA_ADV)
+
+    # MMD parameters
+    MMD_BANDWIDTHS = [0.5, 1.0, 2.0, 4.0]  # RBF kernel bandwidths for multi-kernel MMD
+    USE_CLASS_COND_MMD = True               # Use class-conditional MMD (recommended when target is labeled)
+
+    # Orthogonal regularization
+    USE_PROTOTYPE_LOSS = False              # Include prototype alignment loss (optional)
+
+    # Ramp-up schedules (gradual increase over first N epochs)
+    RAMPUP_EPOCHS = 5         # Number of epochs for ramping up lambda values
+    RAMPUP_LAMBDA_ADV = True  # Ramp up LAMBDA_ADV from 0 to final value
+    RAMPUP_LAMBDA_MMD = True  # Ramp up LAMBDA_MMD from 0 to final value
+    RAMPUP_GRL_COEFF = True   # Ramp up GRL_COEFF from 0 to final value
+
+    # Domain discriminator parameters
+    USE_SPECTRAL_NORM = True  # Use spectral normalization in domain discriminator
+    DOMAIN_DROPOUT = 0.3      # Dropout rate for domain discriminator
+
+    # Domain label smoothing (for stability)
+    DOMAIN_LABEL_SMOOTHING = 0.05  # Smoothing factor for domain labels (0.0 to 0.5)
+
+    # Gradient clipping (for stability)
+    USE_GRADIENT_CLIPPING = True
+    GRADIENT_CLIP_MAX_NORM = 5.0
+
+    # Validation and early stopping (for domain adaptation)
+    DA_EARLY_STOPPING_METRIC = 'target_f1'  # Metric to use: 'target_f1', 'target_acc', 'source_f1'
+
+    # ======================================================================

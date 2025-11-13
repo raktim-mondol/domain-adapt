@@ -1,0 +1,40 @@
+graph TD
+    subgraph BagLevelPrediction["Bag-Level Prediction"]
+        BAG1[Bag 1: Image A<br/>12 patches]
+        BAG2[Bag 2: Image B<br/>12 patches]
+        BAG3[Bag 3: Image C<br/>12 patches]
+        BAGN[Bag n: Image N<br/>12 patches]
+
+        PRED1[Prediction: p1<br/>3-class probs]
+        PRED2[Prediction: p2<br/>3-class probs]
+        PRED3[Prediction: p3<br/>3-class probs]
+        PREDN[Prediction: pn<br/>3-class probs]
+    end
+
+    subgraph PileLevelAggregation["Pile-Level Aggregation"]
+        GROUP[Group by pile_id<br/>Pile X: p1, p2, p3]
+        POOL[Mean Pooling<br/>p_pile = mean of probs]
+        ARGMAX[Final Prediction<br/>class = argmax p_pile]
+    end
+
+    subgraph Metrics
+        ACC[Pile-level Accuracy]
+        F1W[Weighted F1-Score]
+        F1C[Per-class F1-Score]
+        CM[Confusion Matrix]
+    end
+
+    BAG1 --> PRED1
+    BAG2 --> PRED2
+    BAG3 --> PRED3
+    BAGN --> PREDN
+
+    PRED1 & PRED2 & PRED3 & PREDN --> GROUP
+    GROUP --> POOL
+    POOL --> ARGMAX
+
+    ARGMAX --> ACC & F1W & F1C & CM
+
+    style POOL fill:#ffeb99
+    style ARGMAX fill:#99ff99
+    style F1W fill:#99ccff

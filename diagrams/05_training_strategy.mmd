@@ -1,0 +1,18 @@
+timeline
+    title AdaptBMA Training Strategy
+    section Phase 1 Warmup Epochs 0-2
+        Ramp-up lambda_adv 0.0 to 0.4 : lambda_mmd 0.0 to 0.4
+        Ramp-up lambda_grl 0.0 to 0.4 : Focus on classification
+        Gentle introduction of adaptation : Both domains trained
+    section Phase 2 Adaptation Epochs 3-5
+        Full lambda_adv 0.4 to 1.0 : lambda_mmd 0.4 to 0.5
+        Full lambda_grl 0.4 to 1.0 : Domain confusion via DANN
+        Distribution alignment via MMD : Feature orthogonality enforced
+    section Phase 3 Fine-tuning Epochs 6+
+        Stable lambda_adv 1.0 : lambda_mmd 0.5
+        Stable lambda_orth 0.01 : All values constant
+        Convergence and target improvement : Source domain preservation
+    section Validation Every Epoch
+        Bag-level predictions : Pile-level aggregation
+        Source and Target metrics : Monitor Target F1
+        Early stopping patience 10 : Save best model checkpoint

@@ -1,0 +1,67 @@
+graph LR
+    subgraph InputLayer["Input Layer"]
+        IMG[Image<br/>4032×3024]
+    end
+
+    subgraph PatchExtraction["Patch Extraction"]
+        P1[Patch 1<br/>224×224]
+        P2[Patch 2<br/>224×224]
+        PDOT[...]
+        P12[Patch 12<br/>224×224]
+    end
+
+    subgraph FeatureExtraction["Feature Extraction"]
+        VIT[ViT-R50 Backbone<br/>Pretrained IN21K<br/>Frozen/Fine-tuned]
+        F1[Features<br/>768-dim]
+        F2[Features<br/>768-dim]
+        FDOT[...]
+        F12[Features<br/>768-dim]
+    end
+
+    subgraph MILAggregation["MIL Aggregation"]
+        ATT[Attention Mechanism<br/>Tanh + Softmax]
+        ENC[Feature Encoder<br/>Linear + ReLU + Dropout]
+        BAG[Bag Feature z<br/>512-dim]
+    end
+
+    subgraph TaskHead["Task Head"]
+        CLS1[Linear 512→256]
+        RELU1[ReLU]
+        DROP1[Dropout 0.3]
+        CLS2[Linear 256→3]
+        LOGITS[Class Logits<br/>3-dim]
+    end
+
+    subgraph DomainHead["Domain Head"]
+        GRL_BOX[Gradient Reversal<br/>λ schedule: 0→1]
+        DOM1[Linear 512→256<br/>Spectral Norm]
+        RELU2[ReLU]
+        DROP2[Dropout 0.3]
+        DOM2[Linear 256→1<br/>Spectral Norm]
+        D_PRED[Domain Logit<br/>1-dim]
+    end
+
+    IMG --> P1 & P2 & PDOT & P12
+    P1 & P2 & PDOT & P12 --> VIT
+    VIT --> F1 & F2 & FDOT & F12
+    F1 & F2 & FDOT & F12 --> ATT
+    ATT --> ENC
+    ENC --> BAG
+
+    BAG --> CLS1
+    CLS1 --> RELU1
+    RELU1 --> DROP1
+    DROP1 --> CLS2
+    CLS2 --> LOGITS
+
+    BAG --> GRL_BOX
+    GRL_BOX --> DOM1
+    DOM1 --> RELU2
+    RELU2 --> DROP2
+    DROP2 --> DOM2
+    DOM2 --> D_PRED
+
+    style BAG fill:#ffeb99
+    style LOGITS fill:#99ff99
+    style D_PRED fill:#ff9999
+    style GRL_BOX fill:#ffcc99

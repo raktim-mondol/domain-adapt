@@ -1,0 +1,62 @@
+graph TB
+    subgraph DataInput["Data Input"]
+        QLD1[QLD1 Source Domain<br/>60 images, 12 piles<br/>3 classes]
+        QLD2[QLD2 Target Domain<br/>48 images, 12 piles<br/>3 classes]
+    end
+
+    subgraph Preprocessing
+        PE1[Patch Extraction<br/>12 patches per image<br/>1008×1008 → 224×224]
+        PE2[Patch Extraction<br/>12 patches per image<br/>1008×1008 → 224×224]
+    end
+
+    subgraph AdaptBMAModel["AdaptBMA Model"]
+        FE[Feature Extractor<br/>ViT-R50<br/>768-dim features]
+        AGG[Attention Aggregator<br/>512-dim bag features]
+        CLS[Classifier Head<br/>3 classes]
+
+        subgraph DomainAdaptation["Domain Adaptation"]
+            GRL[Gradient Reversal<br/>Layer λ=1.0]
+            DISC[Domain Discriminator<br/>Spectral Norm]
+        end
+    end
+
+    subgraph LossComponents["Loss Components"]
+        L_CLS[Classification Loss<br/>CrossEntropy]
+        L_ADV[Adversarial Loss<br/>DANN + GRL]
+        L_MMD[MMD Loss<br/>Class-Conditional<br/>Multi-kernel RBF]
+        L_ORTH[Orthogonal Loss<br/>Weight Decoupling]
+    end
+
+    subgraph TrainingValidation["Training & Validation"]
+        OPT[Optimizer<br/>AdamW + ReduceLR]
+        VAL[Pile-Level Validation<br/>Mean Pooling]
+        SAVE[Best Model<br/>Target F1]
+    end
+
+    QLD1 --> PE1
+    QLD2 --> PE2
+    PE1 --> FE
+    PE2 --> FE
+    FE --> AGG
+    AGG --> CLS
+    AGG --> GRL
+    GRL --> DISC
+
+    CLS --> L_CLS
+    DISC --> L_ADV
+    AGG --> L_MMD
+    CLS --> L_ORTH
+    DISC --> L_ORTH
+
+    L_CLS --> OPT
+    L_ADV --> OPT
+    L_MMD --> OPT
+    L_ORTH --> OPT
+
+    OPT --> VAL
+    VAL --> SAVE
+
+    style AdaptBMAModel fill:#e1f5ff
+    style DomainAdaptation fill:#fff4e1
+    style LossComponents fill:#ffe1e1
+    style SAVE fill:#e1ffe1
