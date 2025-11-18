@@ -26,158 +26,41 @@ from src.utils import (
     compute_class_weights,
     evaluate_model,
     setup_logging,
-    save_results_to_file
+    save_results_to_file,
+    split_domain_data,
+    validate_split
 )
 from configs.config import Config
 
 
 def split_piles_standard(df, train_ratio=0.7, val_ratio=0.1, test_ratio=0.2, random_state=42):
-    """Split piles into train/val/test sets with stratification"""
-    # Get unique piles and their labels
+    """
+    Split piles into train/val/test sets using configurable split mode
+    Supports both percentage-based and per-class count-based splitting
+    """
+    # Check class distribution first
     pile_labels = df.groupby('pile')['BMA_label'].first().reset_index()
-    unique_piles = pile_labels['pile'].values
-    pile_bma_labels = pile_labels['BMA_label'].values - 1  # 0-indexed
-    
-    # Check class distribution
     class_counts = pile_labels['BMA_label'].value_counts().sort_index()
     print(f"\nPile-level class distribution:")
     for cls, count in class_counts.items():
         print(f"  Class {cls}: {count} piles")
-    
-    # Check if stratification is possible
-    min_class_count = min(class_counts.values)
-    n_splits = 3  # train, val, test
-    
-    print(f"\nSplitting {len(unique_piles)} piles:")
-    print(f"  Train: {train_ratio*100:.1f}% target")
-    print(f"  Val:   {val_ratio*100:.1f}% target")
-    print(f"  Test:  {test_ratio*100:.1f}% target")
-    
-    # For small datasets, use manual stratified splitting
-    if min_class_count < n_splits * 2:
-        print(f"\n[WARNING] Smallest class has only {min_class_count} piles.")
-        print("Using manual stratified split to ensure all classes in all splits...")
-        
-        # Manual stratified split - ensure each class is represented in all splits
-        train_piles_list = []
-        val_piles_list = []
-        test_piles_list = []
-        
-        np.random.seed(random_state)
-        
-        for cls in sorted(class_counts.index):
-            cls_piles = pile_labels[pile_labels['BMA_label'] == cls]['pile'].values
-            cls_piles_shuffled = np.random.permutation(cls_piles)
-            
-            n_cls = len(cls_piles_shuffled)
-            
-            # Calculate split sizes for this class
-            if n_cls >= 3:
-                # Try to maintain ratios, but ensure at least 1 in each split
-                n_cls_test = max(1, int(n_cls * test_ratio))
-                n_cls_val = max(1, int(n_cls * val_ratio))
-                n_cls_train = n_cls - n_cls_test - n_cls_val
-                
-                # If train becomes 0, adjust
-                if n_cls_train < 1:
-                    n_cls_train = 1
-                    n_cls_val = max(1, n_cls - n_cls_train - n_cls_test)
-                    n_cls_test = n_cls - n_cls_train - n_cls_val
-            else:
-                # Very small class - distribute as best as possible
-                if n_cls == 1:
-                    n_cls_train, n_cls_val, n_cls_test = 1, 0, 0
-                elif n_cls == 2:
-                    n_cls_train, n_cls_val, n_cls_test = 1, 1, 0
-                else:
-                    print(f"  [WARNING] Class {cls} has {n_cls} piles - minimal split")
-            
-            # Split this class's piles
-            train_piles_list.extend(cls_piles_shuffled[:n_cls_train])
-            val_piles_list.extend(cls_piles_shuffled[n_cls_train:n_cls_train+n_cls_val])
-            test_piles_list.extend(cls_piles_shuffled[n_cls_train+n_cls_val:])
-            
-            print(f"  Class {cls}: {n_cls_train} train, {n_cls_val} val, {n_cls - n_cls_train - n_cls_val} test")
-        
-        train_piles = np.array(train_piles_list)
-        val_piles = np.array(val_piles_list)
-        test_piles = np.array(test_piles_list)
-        
-        print("\n[SUCCESS] Manual stratified split completed")
-        
-    else:
-        # Standard stratified split for larger datasets
-        try:
-            # First split: train vs (val+test)
-            train_piles, temp_piles, train_labels, temp_labels = train_test_split(
-                unique_piles, pile_bma_labels, 
-                test_size=(val_ratio + test_ratio),
-                random_state=random_state,
-                stratify=pile_bma_labels
-            )
-            
-            # Second split: val vs test
-            val_ratio_adjusted = val_ratio / (val_ratio + test_ratio)
-            val_piles, test_piles, val_labels, test_labels = train_test_split(
-                temp_piles, temp_labels, 
-                test_size=(1 - val_ratio_adjusted),
-                random_state=random_state,
-                stratify=temp_labels
-            )
 
-            print("\n[SUCCESS] Stratified split successful")
-            
-        except ValueError as e:
-            print(f"\n[WARNING] Stratified split failed: {e}")
-            print("Using random split instead...")
-            
-            # Fallback to random split
-            train_piles, temp_piles = train_test_split(
-                unique_piles,
-                test_size=(val_ratio + test_ratio),
-                random_state=random_state
-            )
-            
-            val_ratio_adjusted = val_ratio / (val_ratio + test_ratio)
-            val_piles, test_piles = train_test_split(
-                temp_piles,
-                test_size=(1 - val_ratio_adjusted),
-                random_state=random_state
-            )
-    
-    # Verify no overlap
-    assert len(set(train_piles) & set(val_piles)) == 0, "Train/Val overlap!"
-    assert len(set(train_piles) & set(test_piles)) == 0, "Train/Test overlap!"
-    assert len(set(val_piles) & set(test_piles)) == 0, "Val/Test overlap!"
-    
-    print(f"\n[SUCCESS] No pile overlap between splits")
-    
-    # Verify class distribution in splits
-    train_labels_check = pile_labels[pile_labels['pile'].isin(train_piles)]['BMA_label']
-    val_labels_check = pile_labels[pile_labels['pile'].isin(val_piles)]['BMA_label']
-    test_labels_check = pile_labels[pile_labels['pile'].isin(test_piles)]['BMA_label']
-    
-    train_classes = set(train_labels_check.unique())
-    val_classes = set(val_labels_check.unique())
-    test_classes = set(test_labels_check.unique())
-    all_classes = set(pile_labels['BMA_label'].unique())
-    
-    print(f"\nClass distribution verification:")
-    print(f"  Train set has classes: {sorted(train_classes)}")
-    print(f"  Val set has classes:   {sorted(val_classes)}")
-    print(f"  Test set has classes:  {sorted(test_classes)}")
-    
-    if train_classes != all_classes:
-        print(f"  [WARNING] Train set missing classes: {sorted(all_classes - train_classes)}")
-    if val_classes != all_classes and len(val_piles) > 0:
-        print(f"  [WARNING] Val set missing classes: {sorted(all_classes - val_classes)}")
-    if test_classes != all_classes and len(test_piles) > 0:
-        print(f"  [WARNING] Test set missing classes: {sorted(all_classes - test_classes)}")
-    
-    if train_classes == val_classes == test_classes == all_classes:
-        print(f"  [SUCCESS] All splits contain all {len(all_classes)} classes!")
-    
-    return list(train_piles), list(val_piles), list(test_piles)
+    # Use the new flexible split function from utils
+    train_piles, val_piles, test_piles = split_domain_data(
+        df,
+        split_mode=Config.DATA_SPLIT_MODE,
+        train_ratio=train_ratio,
+        val_ratio=val_ratio,
+        test_ratio=test_ratio,
+        per_class_counts=Config.PER_CLASS_SPLIT_COUNTS,
+        random_state=random_state,
+        stratify=True
+    )
+
+    # Validate split
+    validate_split(df, train_piles, val_piles, test_piles, verbose=True)
+
+    return train_piles, val_piles, test_piles
 
 
 def split_piles_kfold(df, n_folds=5, random_state=42):
