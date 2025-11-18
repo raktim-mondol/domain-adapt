@@ -1,6 +1,9 @@
 # AdaptBMA: Methodology and Evaluation
 
-**Adaptive Bag-based Multi-instance Aggregation for Cross-Domain Biological Assessment**
+**Adaptive Bag-based Multi-instance Aggregation for Coal Mining Analysis**
+
+**Domain**: Coal Mining SpoilType Classification
+**BMA**: SpoilType (classification target)
 
 ---
 
@@ -23,12 +26,12 @@
 
 ### 1.1 Task Definition
 
-**Objective**: Develop a domain adaptation framework for bone marrow aspirate (BMA) classification that transfers knowledge from a well-labeled source domain (QLD1) to a related but distinct target domain (QLD2).
+**Objective**: Develop a domain adaptation framework for coal mining spoil classification that transfers knowledge from a well-labeled source domain (QLD1) to a related but distinct target domain (QLD2).
 
-**Classification Task**: 3-class BMA classification
-- **Class 1**: Category 1 BMA samples
-- **Class 2**: Category 2 BMA samples
-- **Class 3**: Category 3 BMA samples
+**Classification Task**: 3-class BMA (SpoilType) classification
+- **Class 1**: SpoilType Category 1
+- **Class 2**: SpoilType Category 2
+- **Class 3**: SpoilType Category 3
 
 ### 1.2 Domain Shift Challenge
 
@@ -134,7 +137,7 @@ Each technique addresses different aspects of domain adaptation:
 **Multiple Instance Learning (MIL)** paradigm:
 - **Bag**: An image (12 patches)
 - **Instance**: A patch (224×224 pixels)
-- **Bag label**: BMA category (1, 2, or 3)
+- **Bag label**: BMA (SpoilType) category (1, 2, or 3)
 
 #### 3.1.1 Architecture Flow
 
@@ -607,7 +610,7 @@ The hierarchical data structure requires careful evaluation:
 
 **Validation/Test Level**: Pile-level (aggregated)
 - Predictions from multiple images aggregated to pile level
-- Metrics computed at pile level (clinically relevant)
+- Metrics computed at pile level (operationally relevant)
 
 ### 6.2 Pile-Level Aggregation
 
@@ -618,7 +621,7 @@ class_pile = argmax(p_pile)
 ```
 
 Where:
-- `p_i`: Softmax probabilities for image i
+- `p_i`: Softmax probabilities for image i (SpoilType predictions)
 - `N`: Number of images in pile
 - `p_pile`: Aggregated pile-level probabilities
 
@@ -997,7 +1000,7 @@ TRAINABLE_FEATURE_LAYERS = 2  # 0=frozen, -1=all, N=last N layers
 # MIL architecture
 FEATURE_DIM = 768           # ViT-R50 output dimension
 IMAGE_HIDDEN_DIM = 512      # Bag feature dimension
-NUM_CLASSES = 3             # BMA classes
+NUM_CLASSES = 3             # BMA (SpoilType) classes
 
 # Regularization
 DROPOUT_RATE = 0.3          # Dropout in classifier/discriminator heads
@@ -1156,7 +1159,7 @@ Epoch 20+: ~50% (random guessing - goal achieved!)
 
 ## Summary
 
-**AdaptBMA** presents a comprehensive domain adaptation methodology for cross-domain BMA classification that:
+**AdaptBMA** presents a comprehensive domain adaptation methodology for cross-domain BMA (SpoilType) classification in coal mining that:
 
 1. **Combines three complementary techniques** (DANN, MMD, Orthogonal) for robust adaptation
 2. **Preserves the hierarchical data structure** (patch → image → pile) throughout training and evaluation
