@@ -4,17 +4,20 @@ This file provides guidance to Claude Code and AI assistants when working with t
 
 ## Project Overview
 
-**Domain Adaptation for BMA MIL Classifier** - A research project implementing domain adaptation techniques to improve cross-domain performance of a bone marrow aspirate (BMA) classification system using Multiple Instance Learning (MIL).
+**Domain Adaptation for BMA MIL Classifier** - A research project implementing domain adaptation techniques to improve cross-domain performance of a coal mining spoil classification system using Multiple Instance Learning (MIL).
+
+**Dataset**: Coal Mining SpoilType Classification
+**BMA**: SpoilType (classification target in coal mining context)
 
 ### Repository Purpose
 
-Transfer learning between QLD1 (source domain) and QLD2 (target domain) for 3-class BMA classification using:
+Transfer learning between QLD1 (source domain) and QLD2 (target domain) for 3-class BMA (SpoilType) classification using:
 - **DANN**: Domain Adversarial Neural Networks with Gradient Reversal
 - **MMD**: Maximum Mean Discrepancy for distribution alignment
 - **Orthogonal Regularization**: Feature decoupling between task and domain
 
 ### Model Name: **AdaptBMA**
-*Adaptive Bag-based Multi-instance Aggregation for Cross-Domain Biological Assessment*
+*Adaptive Bag-based Multi-instance Aggregation for Coal Mining Analysis*
 
 ## Repository Structure
 
@@ -268,7 +271,7 @@ Sl,pile,image_path,BMA_label
 ```
 - `pile`: Pile identifier (groups images together)
 - `image_path`: Filename only (not full path)
-- `BMA_label`: Integer label 1, 2, or 3 (converted to 0-indexed internally)
+- `BMA_label`: SpoilType label - Integer 1, 2, or 3 (converted to 0-indexed internally)
 
 ### Data Splitting
 
@@ -655,4 +658,4 @@ For questions or issues:
 
 **Model**: AdaptBMA (Adaptive Bag-based Multi-instance Aggregation)
 
-**Purpose**: Cross-domain BMA classification with domain adaptation
+**Purpose**: Cross-domain BMA (SpoilType) classification for coal mining with domain adaptation
