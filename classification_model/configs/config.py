@@ -147,11 +147,24 @@ class Config:
     # Enable domain adaptation
     USE_DOMAIN_ADAPTATION = False  # Set to True to enable domain adaptation
 
+    # Domain Adaptation Mode
+    # Options: 'supervised', 'unsupervised', 'semi_supervised'
+    # - 'supervised': Both source and target domains have labels (current implementation)
+    # - 'unsupervised': Only source domain has labels, target domain is unlabeled
+    # - 'semi_supervised': Source domain has labels, target domain is partially labeled
+    DA_MODE = 'supervised'
+
     # Domain data paths (QLD1 = source, QLD2 = target)
     QLD1_DATA_PATH = 'data/qld1_data.csv'  # Source domain data
     QLD2_DATA_PATH = 'data/qld2_data.csv'  # Target domain data
     QLD1_IMAGE_DIR = 'data/qld1_images'    # Source domain images
     QLD2_IMAGE_DIR = 'data/qld2_images'    # Target domain images
+
+    # Semi-Supervised Domain Adaptation Settings (only used when DA_MODE = 'semi_supervised')
+    SSDA_LABELED_RATIO = 0.2              # Fraction of target domain that is labeled (0.0 to 1.0)
+    SSDA_LABELED_SAMPLES_PER_CLASS = None # Alternative: specify exact number of labeled samples per class
+                                          # If set, this overrides SSDA_LABELED_RATIO
+    SSDA_RANDOM_SEED = 42                 # Random seed for selecting labeled target samples
 
     # Domain adaptation loss weights
     LAMBDA_ADV = 1.0          # Weight for adversarial domain confusion loss (DANN)
@@ -163,7 +176,9 @@ class Config:
 
     # MMD parameters
     MMD_BANDWIDTHS = [0.5, 1.0, 2.0, 4.0]  # RBF kernel bandwidths for multi-kernel MMD
-    USE_CLASS_COND_MMD = True               # Use class-conditional MMD (recommended when target is labeled)
+    USE_CLASS_COND_MMD = True               # Use class-conditional MMD (recommended for supervised/semi-supervised)
+                                            # NOTE: For unsupervised mode, this is automatically set to False
+                                            #       since target labels are unavailable
 
     # Orthogonal regularization
     USE_PROTOTYPE_LOSS = False              # Include prototype alignment loss (optional)
