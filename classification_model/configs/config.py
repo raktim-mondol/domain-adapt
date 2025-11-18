@@ -63,11 +63,26 @@ class Config:
 
     # Data split (pile-level)
     SPLIT_MODE = 'kfold'  # 'standard' or 'kfold'
+
+    # Data split strategy
+    DATA_SPLIT_MODE = 'percentage'  # 'percentage' or 'per_class_count'
+
+    # Percentage-based split (used when DATA_SPLIT_MODE = 'percentage')
     TRAIN_RATIO = 0.7
     VAL_RATIO = 0.1
     TEST_RATIO = 0.2
     RANDOM_STATE = 42
-    
+
+    # Per-class count-based split (used when DATA_SPLIT_MODE = 'per_class_count')
+    # Format: {class_label: {'train': N, 'val': N, 'test': N}}
+    # Example for 3-class problem with classes 1, 2, 3
+    # NOTE: Adjust these numbers based on your dataset size per class
+    PER_CLASS_SPLIT_COUNTS = {
+        1: {'train': 10, 'val': 3, 'test': 5},
+        2: {'train': 10, 'val': 3, 'test': 5},
+        3: {'train': 10, 'val': 3, 'test': 5}
+    }
+
     # Cross-validation (pile-level)
     NUM_FOLDS = 3  # Only used when SPLIT_MODE = 'kfold'
 
@@ -152,6 +167,45 @@ class Config:
     QLD2_DATA_PATH = 'data/qld2_data.csv'  # Target domain data
     QLD1_IMAGE_DIR = 'data/qld1_images'    # Source domain images
     QLD2_IMAGE_DIR = 'data/qld2_images'    # Target domain images
+
+    # ==================== Domain-Specific Data Split Configuration ====================
+
+    # Source Domain (QLD1) Split Configuration
+    QLD1_SPLIT_MODE = 'percentage'  # 'percentage' or 'per_class_count'
+
+    # QLD1 Percentage-based split
+    QLD1_TRAIN_RATIO = 0.7
+    QLD1_VAL_RATIO = 0.1
+    QLD1_TEST_RATIO = 0.2
+
+    # QLD1 Per-class count-based split
+    # Format: {class_label: {'train': N, 'val': N, 'test': N}}
+    QLD1_PER_CLASS_SPLIT_COUNTS = {
+        1: {'train': 10, 'val': 3, 'test': 5},
+        2: {'train': 10, 'val': 3, 'test': 5},
+        3: {'train': 10, 'val': 3, 'test': 5}
+    }
+
+    # Target Domain (QLD2) Split Configuration
+    QLD2_SPLIT_MODE = 'percentage'  # 'percentage' or 'per_class_count'
+
+    # QLD2 Percentage-based split
+    QLD2_TRAIN_RATIO = 0.7
+    QLD2_VAL_RATIO = 0.1
+    QLD2_TEST_RATIO = 0.2
+
+    # QLD2 Per-class count-based split
+    # Format: {class_label: {'train': N, 'val': N, 'test': N}}
+    QLD2_PER_CLASS_SPLIT_COUNTS = {
+        1: {'train': 10, 'val': 3, 'test': 5},
+        2: {'train': 10, 'val': 3, 'test': 5},
+        3: {'train': 10, 'val': 3, 'test': 5}
+    }
+
+    # Random seed for domain splits
+    DOMAIN_RANDOM_STATE = 42
+
+    # =================================================================================
 
     # Domain adaptation loss weights
     LAMBDA_ADV = 1.0          # Weight for adversarial domain confusion loss (DANN)

@@ -20,7 +20,9 @@ from src.augmentation import get_augmentation_pipeline
 from src.utils import (
     train_model_domain_adaptation,
     compute_class_weights,
-    setup_logging
+    setup_logging,
+    split_domain_data,
+    validate_split
 )
 from configs.config import Config
 
@@ -59,71 +61,6 @@ def load_domain_data(data_path, image_dir, domain_name):
         print(f"    Class {cls}: {count} piles")
 
     return df
-
-
-def split_domain_data(df, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, random_state=42):
-    """
-    Split domain data into train/val/test sets at pile level
-
-    Args:
-        df: DataFrame with pile and label columns
-        train_ratio: Ratio for training
-        val_ratio: Ratio for validation
-        test_ratio: Ratio for testing
-        random_state: Random seed
-
-    Returns:
-        train_piles, val_piles, test_piles: Lists of pile IDs
-    """
-    from sklearn.model_selection import train_test_split
-
-    # Get unique piles and labels
-    pile_labels = df.groupby('pile')['BMA_label'].first().reset_index()
-    unique_piles = pile_labels['pile'].values
-    labels = pile_labels['BMA_label'].values - 1  # 0-indexed
-
-    # Split
-    try:
-        # First split: train vs (val+test)
-        train_piles, temp_piles, _, temp_labels = train_test_split(
-            unique_piles, labels,
-            test_size=(val_ratio + test_ratio),
-            random_state=random_state,
-            stratify=labels
-        )
-
-        # Second split: val vs test
-        val_ratio_adj = val_ratio / (val_ratio + test_ratio)
-        val_piles, test_piles, _, _ = train_test_split(
-            temp_piles, temp_labels,
-            test_size=(1 - val_ratio_adj),
-            random_state=random_state,
-            stratify=temp_labels
-        )
-
-        print("  Stratified split successful")
-
-    except ValueError as e:
-        print(f"  [WARNING] Stratified split failed: {e}")
-        print("  Using random split instead...")
-
-        # Fallback to random split
-        train_piles, temp_piles = train_test_split(
-            unique_piles,
-            test_size=(val_ratio + test_ratio),
-            random_state=random_state
-        )
-
-        val_ratio_adj = val_ratio / (val_ratio + test_ratio)
-        val_piles, test_piles = train_test_split(
-            temp_piles,
-            test_size=(1 - val_ratio_adj),
-            random_state=random_state
-        )
-
-    print(f"  Split: {len(train_piles)} train, {len(val_piles)} val, {len(test_piles)} test piles")
-
-    return list(train_piles), list(val_piles), list(test_piles)
 
 
 def create_domain_dataloaders(df, train_piles, val_piles, image_dir,
@@ -267,15 +204,31 @@ def main():
 
     print("\nSource Domain (QLD1) Split:")
     source_train_piles, source_val_piles, source_test_piles = split_domain_data(
-        source_df, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1,
-        random_state=Config.RANDOM_STATE
+        source_df,
+        split_mode=Config.QLD1_SPLIT_MODE,
+        train_ratio=Config.QLD1_TRAIN_RATIO,
+        val_ratio=Config.QLD1_VAL_RATIO,
+        test_ratio=Config.QLD1_TEST_RATIO,
+        per_class_counts=Config.QLD1_PER_CLASS_SPLIT_COUNTS,
+        random_state=Config.DOMAIN_RANDOM_STATE,
+        stratify=True
     )
+    # Validate source split
+    validate_split(source_df, source_train_piles, source_val_piles, source_test_piles, verbose=True)
 
     print("\nTarget Domain (QLD2) Split:")
     target_train_piles, target_val_piles, target_test_piles = split_domain_data(
-        target_df, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1,
-        random_state=Config.RANDOM_STATE
+        target_df,
+        split_mode=Config.QLD2_SPLIT_MODE,
+        train_ratio=Config.QLD2_TRAIN_RATIO,
+        val_ratio=Config.QLD2_VAL_RATIO,
+        test_ratio=Config.QLD2_TEST_RATIO,
+        per_class_counts=Config.QLD2_PER_CLASS_SPLIT_COUNTS,
+        random_state=Config.DOMAIN_RANDOM_STATE,
+        stratify=True
     )
+    # Validate target split
+    validate_split(target_df, target_train_piles, target_val_piles, target_test_piles, verbose=True)
 
     # Setup augmentation
     augmentation = get_augmentation_pipeline(is_training=True, target_size=224)

@@ -14,6 +14,12 @@ from .domain_adaptation import (
     get_rampup_coefficient,
     compute_domain_loss
 )
+from .data_split_utils import (
+    split_domain_data,
+    split_data_percentage,
+    split_data_per_class_count,
+    validate_split
+)
 
 __all__ = [
     'train_model',
@@ -27,5 +33,9 @@ __all__ = [
     'train_one_epoch_domain_adaptation',
     'validate_domain_adaptation',
     'get_rampup_coefficient',
-    'compute_domain_loss'
+    'compute_domain_loss',
+    'split_domain_data',
+    'split_data_percentage',
+    'split_data_per_class_count',
+    'validate_split'
 ]
